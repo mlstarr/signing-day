@@ -344,7 +344,7 @@ function winner(g){return g.hs>g.as?g.h:g.a;}
 const COACH_FN=["Mike","Tim","Chris","Jason","Brian","Matt","Kevin","Steve","Dan","Josh","Ryan","Jeff","Mark","Shane","Will","Kane","Derek","Travis","Marcus","Andre"];
 const COACH_LN=["Holloway","Brennan","Castillo","Pryor","Whitfield","Grady","Okoye","Lindqvist","Barrett","Delaney","Mercer","Sutton","Vance","Rourke","Callahan","Teague","Dorsett","Ashby","Kincaid","Merritt"];
 function fakeCoach(lo,hi){return {name:pick(COACH_FN)+" "+pick(COACH_LN),rec:rint(lo,hi),dev:rint(lo+4,hi+4),game:rint(lo+2,hi+2),hot:0,yrs:0,real:false};}
-function coachChangeUser(sum,oldName,nc){sum.lines.push(`🎠 Coaching change: ${oldName} is out. New head coach ${nc.name} (REC ${nc.rec} / DEV ${nc.dev} / GAME ${nc.game}). Your commits are wobbling.`);U().sec=clamp(U().sec-8,0,100);}
+function coachChangeUser(sum,oldName,nc){sum.lines.push(`🎠 Coaching change: ${oldName} is out. New head coach ${nc.name} (REC ${nc.rec} / DEV ${nc.dev} / GAME ${nc.game}). Your commits are wobbling.`);U().sec=clamp(U().sec-8,0,100);trust().hc=40;sum.lines.push(`🤝 ${nc.name} doesn't know you yet — your influence with the head coach starts over.`);}
 
 // ---------- OFFICIAL VISITS ----------
 function ovSlots(){
@@ -1064,9 +1064,10 @@ function advance(){
     if(e.k==="miss")sum.lines.push(`😞 ${rName(e.r)} chose ${T(e.t).school} over you.`);
   });
   if(evts.some(e=>e.k==="commit"||e.k==="flip")){U().rep=clamp(U().rep+0.4,0,100);}
-  evts.forEach(e=>{if(e.k==="commit"||e.k==="flip"){gainXP("pers",3+e.r.stars);gainXP("rel",2+e.r.stars);gainDXP(e.r.stars*6+(e.k==="flip"?10:0));if(e.r.stars>=4)gainPC(1.5);growPipe(e.r,4,1.5);
+  evts.forEach(e=>{if(e.k==="commit"||e.k==="flip"){gainXP("pers",3+e.r.stars);gainXP("rel",2+e.r.stars);gainDXP(e.r.stars*6+(e.k==="flip"?10:0));if(e.r.stars>=4){gainPC(1.5);addTrust("hc",e.r.stars>=5?1:0.5);addTrust("ad",0.25);}growPipe(e.r,4,1.5);
     const ai=admitIssue(e.r,U().teamId);if(ai)sum.lines.push(`⚠️ ${rName(e.r)} has an admissions issue (${ai}). He'll need a waiver at signing — ${waiversLeft()} left.`);}});
   if(p.key==="spring2")nflDraft(sum);
+  resolveSearches(sum);
   maybeEvent();
   S.phaseIdx++;
   if(S.phaseIdx>=S.cal.length){rollYear(sum);}
@@ -1126,7 +1127,7 @@ function portalTick(final,sum){
       else if(p.rank<=40)addNews(`🌀 Top portal ${p.pos} ${rName(p)} (${p.tOvr} OVR, ex-${T(p.from).school}) commits to ${T(top).school}.`,"portal",top);
     }});
   if(final){
-    (S.retention||[]).slice().forEach(x=>resolveRetention(x.pid,false));
+    (S.retention||[]).slice().forEach(x=>hcRetention(x.pid,sum));
     S.portalHist=S.portal.filter(p=>p.com===uid).map(p=>({n:rName(p),pos:p.pos,ovr:p.tOvr,from:p.from}));
     const unsigned=S.portal.filter(p=>!p.com).length;
     S.portal=[];S.portalOpen=false;invalidateProj();refreshTalent();
@@ -1157,7 +1158,7 @@ function rosterDepartures(sum){
   if(port.length)sum.lines.push(`⚠️ ${port.length} players are considering the portal. Handle it on the Team tab before the window closes.`);
   invalidateProj();
 }
-function resolveRetention(pid,keep){
+function applyRetention(pid,keep){
   const i=S.retention.findIndex(x=>x.pid===pid);if(i<0)return;const rr=S.retention[i];const p=S.roster.find(x=>x.id===pid);if(!p){S.retention.splice(i,1);return;}
   if(keep){if(budgetLeft()<rr.ask-p.nil)return {ok:false,msg:"Not enough budget."};S.retention.splice(i,1);p.nil=rr.ask;p.mor=80;addNews(`🤝 ${p.pos} ${p.fn} ${p.ln} signs a retention deal and stays.`,"user");}
   else{S.retention.splice(i,1);S.roster=S.roster.filter(x=>x!==p);
@@ -1316,9 +1317,9 @@ function coachingCarousel(sum){
   staff.forEach((a,si)=>{if(!a)return;const p=0.03+Math.max(0,(a.rec+a.sch)/2-74)/110+(UT().w>=10?0.06:0)+a.amb*0.05;if(R()>p)return;
     const op=openings.find(o=>o.id!==uid&&!o.filled&&T(o.id).prestige<=UT().prestige+5);
     if(op&&(a.role==="oc"||a.role==="dc"||R()<0.3)){op.filled={name:a.name,rec:a.rec,dev:a.dev,game:a.sch,hot:0,yrs:0,real:false,from:uid};staff[si]=null;
-      addNews(`🎓 Your ${STAFF_ROLES[si].n}, ${a.name}, is hired as head coach at ${T(op.id).school}.`,"user");sum.lines.push(`🎓 ${a.name} (your ${STAFF_ROLES[si].n}) lands the head job at ${T(op.id).school}. Hire a replacement in Team → Coach & Staff.`);
+      addNews(`🎓 Your ${STAFF_ROLES[si].n}, ${a.name}, is hired as head coach at ${T(op.id).school}.`,"user");sum.lines.push(`🎓 ${a.name} (your ${STAFF_ROLES[si].n}) lands the head job at ${T(op.id).school}. Coach ${UT().coach.name.split(" ").pop()} will interview replacements — weigh in on Team → Coach & Staff.`);
       if(!S.pendingJob&&R()<0.45&&T(op.id).prestige>=UT().prestige-15)S.pendingJob={type:"follow",to:op.id,coach:a.name,newCoach:UT().coach.name,role:STAFF_ROLES[si].n};}
-    else S.events.push({id:"poach",aid:a.id,si,title:"📞 Your assistant is being poached",text:`${a.name}, your ${STAFF_ROLES[si].n}, has a coordinator offer from another Power program. Counter with a raise (+${money(Math.round(a.sal*0.35))}/yr) or let him go?`,opts:[["Counter-offer","poachKeep"],["Wish him well","poachLet"]]});
+    else S.events.push({id:"poach",aid:a.id,si,title:"📞 Your assistant is being poached",text:`${a.name}, your ${STAFF_ROLES[si].n}, has a coordinator offer from another Power program. Keeping him would take a raise (+${money(Math.round(a.sal*0.35))}/yr) — that's the AD's money and the head coach's call. The AD asks what you think.`,opts:[["Urge the AD to counter","poachKeep"],["Stay out of it","poachLet"]]});
   });
   if(!openings.length){addNews("🎠 Quiet coaching carousel this year — no major openings.","coach");return;}
   openings.forEach(o=>{
@@ -1363,16 +1364,6 @@ function inTerritory(st){return (U().staff||[]).some(s=>s&&s.terr.includes(st));
 function bestAsst(r){let best=null,bv=0;(U().staff||[]).forEach(s=>{if(!s)return;if(s.vt===S.tick&&s.vn>=2)return;let v=s.rec*(s.terr.includes(r.st)?1.35:1)*(s.pos&&s.pos.includes(r.pos)?1.15:1);if(v>bv){bv=v;best=s;}});return best?{s:best,v:bv}:null;}
 function schemeBonus(){const st=U().staff||[];const oc=st[0],dc=st[1];return ((oc?oc.sch:62)+(dc?dc.sch:62)-144)*0.05;}
 function canFire(){const p=phase();return !["game","pre"].includes(p.type);}
-function hireCandidates(si){const key=S.year+"|"+S.phaseIdx;if(S.candsKey!==key){S.cands={};S.candsKey=key;}
-  if(!S.cands[si]){const t=UT();const lvl=clamp(Math.round(t.prestige*0.33+48+U().rep*0.1),55,88);S.cands[si]=[0,1,2,3].map(()=>genAssistant(STAFF_ROLES[si].k,lvl+rint(-9,6)));}return S.cands[si];}
-function hireAssistant(si,cid){const st=U().staff;if(st[si])return {ok:false,msg:"That job is filled. Fire the current coach first (offseason only)."};
-  const c=(S.cands&&S.cands[si]||[]).find(x=>x.id===cid);if(!c)return {ok:false,msg:"Candidate unavailable."};
-  if(staffPayroll()+c.sal>staffBudget())return {ok:false,msg:`Over the staff budget (${money(staffBudget())}). Fire someone or ask the AD for more.`};
-  st[si]=c;S.cands[si]=S.cands[si].filter(x=>x!==c);const t=UT();
-  if(c.role==="oc"&&c.style&&c.style!==t.off){t.off=c.style;addNews(`🧠 New OC ${c.name} installs the ${c.style} offense.`,"user");}
-  if(c.role==="dc"&&c.style&&c.style!==t.def){t.def=c.style;addNews(`🧠 New DC ${c.name} brings a ${c.style} defense.`,"user");}
-  addNews(`✍️ ${t.school} hires ${c.name} as ${STAFF_ROLES[si].n}.`,"user");gainDXP(5);return {ok:true,msg:`Hired ${c.name}.`};}
-function fireAssistant(si){if(!canFire())return {ok:false,msg:"You can only make staff changes in the offseason."};const a=U().staff[si];if(!a)return {ok:false};U().staff[si]=null;if(U().ad)U().ad.commit=clamp(U().ad.commit-1,0,100);addNews(`🚪 ${UT().school} parts ways with ${STAFF_ROLES[si].n} ${a.name}.`,"user");return {ok:true,msg:`${a.name} is out.`};}
 function newHCStaff(sum){const st=U().staff;const t=UT();const lvl=clamp(Math.round(t.prestige*0.35+48),55,82);let n=0;
   st.forEach((a,i)=>{if(a&&R()<0.5){st[i]=genAssistant(STAFF_ROLES[i].k,lvl+rint(-4,6));n++;}});
   if(st[0]&&st[0].style)t.off=st[0].style;if(st[1]&&st[1].style)t.def=st[1].style;
@@ -1431,6 +1422,7 @@ function maybeEvent(){
   }
   pool.push({id:"booster",title:"💼 Booster with strings",text:`A major donor offers ${money(500)} to the collective — if you offer his nephew, a 2★ long snapper. Compliance won't love it.`,opts:[["Take the money","boosterYes"],["Politely decline","boosterNo"]]});
   pool.push({id:"camp",title:"🏕️ Satellite camp invite",text:`A high school in ${pick(RECRUIT_GEO)[0]} invites your staff to work a camp this weekend. Free scouting on a few prospects, costs 4 hours.`,opts:[["Go (4h)","campYes"],["Pass","campNo"]]});
+  hcAsks(pool);
   S.events.push(pick(pool));
 }
 function resolveEvent(choice){
@@ -1452,8 +1444,12 @@ function resolveEvent(choice){
     case "hanNo":r.int[uid]*=0.88;U().rep=clamp(U().rep+1,0,100);msg="You cut out the middleman. −12% interest, +1 reputation.";break;
     case "dadYes":r.int[uid]+=15;r.promPT=true;msg="Dad is all in. +15. You'd better keep that promise.";break;
     case "dadNo":{const w=r.mot[MOTIVE_IDX.pt];r.int[uid]+=w>0.2?-6:4;msg=w>0.2?"Not what he wanted to hear. −6.":"He respected the honesty. +4.";}break;
-    case "poachKeep":{const a=(U().staff||[]).find(x=>x&&x.id===e.aid);if(!a){msg="He already left.";break;}if(R()<0.7){a.sal=Math.round(a.sal*1.35/25)*25;a.amb=Math.max(0,a.amb-0.3);msg=`${a.name} stays. New salary ${money(a.sal)}.`;}else{U().staff[e.si]=null;msg=`${a.name} took the job anyway. Hire a replacement.`;}}break;
-    case "poachLet":{const i=e.si;const a=U().staff[i];if(a&&a.id===e.aid){U().staff[i]=null;msg=`${a.name} is off to a new job. Hire a replacement in Team → Coach & Staff.`;}else msg="";}break;
+    case "poachKeep":{const a=(U().staff||[]).find(x=>x&&x.id===e.aid);if(!a){msg="He already left.";break;}
+      if(R()>0.4+trust().ad/200){U().staff[e.si]=null;addTrust("ad",-1);msg=`The AD heard you out but wouldn't open the checkbook. ${a.name} takes the job — Coach ${hcLast()} will interview replacements.`;break;}
+      if(R()<0.7){a.sal=Math.round(a.sal*1.35/25)*25;a.amb=Math.max(0,a.amb-0.3);addTrust("hc",1);msg=`The AD took your advice and countered. ${a.name} stays at ${money(a.sal)}/yr.`;}else{U().staff[e.si]=null;msg=`The AD countered on your word, but ${a.name} took the job anyway. Coach ${hcLast()} will interview replacements.`;}}break;
+    case "poachLet":{const i=e.si;const a=U().staff[i];if(a&&a.id===e.aid){const v=(a.rec+a.dev+a.sch)/3;if(v>=76&&R()<0.35){a.sal=Math.round(a.sal*1.3/25)*25;a.amb=Math.max(0,a.amb-0.3);msg=`You stayed out of it. The head coach pushed the AD himself — ${a.name} stays at ${money(a.sal)}/yr.`;}else{U().staff[i]=null;msg=`You stayed out of it. ${a.name} is off to a new job; Coach ${hcLast()} will interview replacements.`;}}else msg="";}break;
+    case "rsYes":case "rsNo":msg=resolveRS(e,choice==="rsYes");break;
+    case "schYes":case "schNo":msg=resolveSch(e,choice==="schYes");break;
   }
   return msg;
 }
@@ -1491,7 +1487,7 @@ function save(){if(!S)return;const seq=++_saveSeq;const n=S.slot||1;let js;try{j
     return idbPut(slotKey(n),z).then(()=>{try{localStorage.removeItem(slotKey(n));}catch(e){}},()=>{localStorage.setItem(slotKey(n),z);});})
   .then(()=>{if(seq!==_saveSeq)return;const m=getMeta();m.active=n;m.slots[n]=meta;setMeta(m);S._saveErr=null;})
   .catch(e=>{S._saveErr=String(e);console.warn("save failed",e);});}
-async function loadSlot(n){try{let z=null;try{z=await idbGet(slotKey(n));}catch(e){}if(!z)z=localStorage.getItem(slotKey(n));if(!z)return false;const js=await gunz(z);const o=JSON.parse(js);if(!o||o.v!==SAVE_VER)return false;S=o;S.slot=n;migrateFit();const m=getMeta();m.active=n;setMeta(m);return true;}catch(e){console.warn(e);return false;}}
+async function loadSlot(n){try{let z=null;try{z=await idbGet(slotKey(n));}catch(e){}if(!z)z=localStorage.getItem(slotKey(n));if(!z)return false;const js=await gunz(z);const o=JSON.parse(js);if(!o||o.v!==SAVE_VER)return false;S=o;S.slot=n;migrateFit();trust();S.search=S.search||{};const m=getMeta();m.active=n;setMeta(m);return true;}catch(e){console.warn(e);return false;}}
 function deleteSlot(n){idbDel(slotKey(n));try{localStorage.removeItem(slotKey(n));}catch(e){}const m=getMeta();delete m.slots[n];setMeta(m);}
 function load(){return false;}
 
@@ -1534,3 +1530,73 @@ function rosterFit(side,scheme){const ro=S.roster.filter(p=>(side==="off")===OFF
   const st=[];POSITIONS.forEach(pos=>{if((side==="off")!==OFF_POS.includes(pos)||pos==="K")return;depth(pos).slice(0,POS_STARTERS[pos]).forEach(p=>st.push(p));});
   if(!st.length)return 0;return st.reduce((a,p)=>a+Math.round(fitVal(p,scheme)*4),0)/st.length;}
 function migrateFit(){S.recruits.forEach(genFit);S.portal.forEach(genFit);S.roster.forEach(p=>{genFit(p);if(p.fk===undefined)p.fk=true;});S.teamIds.forEach(id=>(T(id).roster||[]).forEach(genFit));}
+
+// ---------- ADVISORY ROLE: the HC and AD decide, the director advises ----------
+function trust(){const u=U();if(!u.trust)u.trust={hc:55,ad:50};return u.trust;}
+function addTrust(k,n){const t=trust();t[k]=clamp(Math.round((t[k]+n)*10)/10,0,100);}
+function hcLast(){return UT().coach.name.split(" ").pop();}
+function trustLabel(v){return v>=80?"Inner circle":v>=65?"Trusted voice":v>=50?"Respected":v>=35?"Still proving yourself":"On thin ice";}
+function followP(k,base){return clamp(base+trust()[k]/150,0.1,0.95);}
+function hcScore(c){return c.sch*0.5+c.dev*0.3+c.rec*0.2+rnd(-3,3);}
+function hireCandidates(si){S.search=S.search||{};let q=S.search[si];
+  if(!q){const t=UT();const lvl=clamp(Math.round(t.prestige*0.33+48+U().rep*0.1),55,88);q=S.search[si]={t:S.tick||0,rec:null,c:[0,1,2,3].map(()=>genAssistant(STAFF_ROLES[si].k,lvl+rint(-9,6)))};}
+  return q.c;}
+function recommendAssistant(si,cid){const q=S.search&&S.search[si];if(!q)return {ok:false,msg:"No search under way."};const c=q.c.find(x=>x.id===cid);if(!c)return {ok:false,msg:"Candidate unavailable."};
+  q.rec=q.rec===cid?null:cid;return {ok:true,msg:q.rec?`You told Coach ${hcLast()} ${c.name} is your guy. He'll decide after this week's interviews.`:"Recommendation withdrawn."};}
+function resolveSearches(sum){const st=U().staff;if(!st)return;S.search=S.search||{};
+  STAFF_ROLES.forEach((r,si)=>{
+    if(st[si]){delete S.search[si];return;}
+    const q=S.search[si];
+    if(!q||q.t>=(S.tick||0)){if(!q){hireCandidates(si);S.search[si].t=S.tick||0;sum.lines.push(`🧑‍💼 Coach ${hcLast()} is interviewing for ${r.n}. He'd like your read — Team → Coach & Staff.`);}return;}
+    const room=staffBudget()-staffPayroll();
+    let pool=q.c.filter(c=>c.sal<=room);if(!pool.length){q.c.forEach(c=>{c.sal=Math.min(c.sal,Math.max(100,Math.round(room/25)*25));});pool=q.c;}
+    const recd=q.rec!=null?q.c.find(c=>c.id===q.rec):null;let c,line;
+    if(recd&&!pool.includes(recd)){c=pool.slice().sort((a,b)=>hcScore(b)-hcScore(a))[0];line=`💸 The AD couldn't fit ${recd.name}'s salary. Coach ${hcLast()} hired ${c.name} as ${r.n}.`;}
+    else if(recd&&R()<followP("hc",0.35)){c=recd;addTrust("hc",2);gainDXP(6);line=`✅ Coach ${hcLast()} took your recommendation and hired ${c.name} as ${r.n}.`;}
+    else{c=pool.slice().sort((a,b)=>hcScore(b)-hcScore(a))[0];line=recd&&c!==recd?`🧢 Coach ${hcLast()} went with his own guy: ${c.name} is the new ${r.n} (you'd recommended ${recd.name}).`:`🧢 Coach ${hcLast()} hired ${c.name} as ${r.n}.`;if(recd&&c===recd){addTrust("hc",1);}}
+    st[si]=c;delete S.search[si];const t=UT();
+    if(c.role==="oc"&&c.style&&c.style!==t.off){t.off=c.style;line+=` He's installing the ${c.style} offense.`;}
+    if(c.role==="dc"&&c.style&&c.style!==t.def){t.def=c.style;line+=` He brings a ${c.style} defense.`;}
+    sum.lines.push(line);addNews(`✍️ ${t.school} hires ${c.name} as ${r.n}.`,"user");invalidateProj();});}
+function canConcern(si){const a=(U().staff||[])[si];return a&&canFire()&&a.cY!==S.year;}
+function raiseConcern(si){const a=(U().staff||[])[si];if(!a)return {ok:false};if(!canFire())return {ok:false,msg:"Coach won't touch his staff during the season. Bring it up in the offseason."};
+  if(a.cY===S.year)return {ok:false,msg:"You already raised this one this year."};a.cY=S.year;
+  const v=(a.rec+a.dev+a.sch)/3;const p=clamp(0.08+(trust().hc-50)/110+(72-v)/35,0.03,0.85);
+  if(R()<p){U().staff[si]=null;if(U().ad)U().ad.commit=clamp(U().ad.commit-1,0,100);addNews(`🚪 ${UT().school} parts ways with ${STAFF_ROLES[si].n} ${a.name}.`,"user");if(v<68)addTrust("hc",1);invalidateProj();
+    return {ok:true,msg:`Coach ${hcLast()} agreed. ${a.name} is out — he'll start interviewing next week.`};}
+  addTrust("hc",v>=74?-4:-1.5);
+  return {ok:true,msg:v>=74?`Coach ${hcLast()} bristled: "${a.name.split(" ").pop()} is one of the best in the business." (Head-coach trust down.)`:`Coach ${hcLast()} heard you out but is sticking with ${a.name} for now.`};}
+function isStarter(p){return depth(p.pos).slice(0,POS_STARTERS[p.pos]||1).includes(p);}
+function resolveRetention(pid,keep){const rr=(S.retention||[]).find(x=>x.pid===pid);const p=S.roster.find(x=>x.id===pid);if(!rr||!p)return {ok:false,msg:"He's already decided."};
+  if(rr.rc)return {ok:false,msg:"You already gave your recommendation."};
+  const stv=isStarter(p);const nm=`${p.fn} ${p.ln}`;
+  if(keep){const pk=clamp(0.55+trust().ad/200+(stv?0.2:0)-(rr.ask>400?0.1:0),0.1,0.97);
+    if(budgetLeft()<rr.ask-p.nil){rr.rc=1;return {ok:false,msg:`The AD likes the idea, but there's no NIL budget left for ${money(rr.ask)}. Coach ${hcLast()} will decide when the window closes.`};}
+    if(R()<pk){applyRetention(pid,true);addTrust("ad",0.5);return {ok:true,msg:`Approved. The AD and Coach ${hcLast()} signed off — ${nm} stays at ${money(rr.ask)}.`};}
+    applyRetention(pid,false);return {ok:true,msg:`Coach ${hcLast()} decided not to match ${money(rr.ask)}. ${nm} is headed to the portal.`};}
+  if(R()<(stv?0.4:0.85)){applyRetention(pid,false);return {ok:true,msg:`Coach ${hcLast()} agreed — ${nm} is free to explore the portal.`};}
+  if(budgetLeft()>=rr.ask-p.nil){applyRetention(pid,true);return {ok:true,msg:`Coach ${hcLast()} overruled you: "${p.ln} starts for us." He's keeping ${nm} at ${money(rr.ask)}.`};}
+  applyRetention(pid,false);return {ok:true,msg:`Coach ${hcLast()} wanted to keep him but the money wasn't there. ${nm} enters the portal.`};}
+function hcRetention(pid,sum){const rr=(S.retention||[]).find(x=>x.pid===pid);const p=S.roster.find(x=>x.id===pid);if(!rr||!p){applyRetention(pid,false);return;}
+  const keep=isStarter(p)&&budgetLeft()>=rr.ask-p.nil;applyRetention(pid,keep);
+  if(sum)sum.lines.push(keep?`🤝 Coach ${hcLast()} kept starter ${p.pos} ${p.fn} ${p.ln} (${money(rr.ask)}).`:`🚪 Coach ${hcLast()} let ${p.pos} ${p.fn} ${p.ln} go to the portal.`);}
+// head coach asks for input
+function hcAsks(pool){const ph=phase();const t=UT();const uid=t.id;
+  if(ph.type==="game"&&ph.week>=2&&ph.week<=8){
+    const fr=S.roster.filter(p=>p.yr===1&&p.rs&&!(p.inj>0)&&!p.rsAsk).filter(p=>{const d=depth(p.pos);const i=d.indexOf(p);const n=POS_STARTERS[p.pos]||1;return i>=n&&i<n+2&&d[n-1]&&p.ovr>=d[n-1].ovr-5;});
+    if(fr.length){const p=pick(fr);p.rsAsk=1;const w=p.byMe?" You recruited him, so he wants your read.":"";
+      pool.push({id:"rs",pid:p.id,title:`🧢 Coach ${hcLast()} wants your input`,text:`True freshman ${p.pos} ${p.fn} ${p.ln} (${p.ovr} OVR) is pushing for snaps. Play him now and burn his redshirt, or save the year?${w}`,opts:[["Play him — he's ready","rsYes"],["Redshirt him","rsNo"]]});}}
+  if(["off","camp","ov"].includes(ph.type)&&S.schAsk!==S.year){
+    [["off",t.off,OFF_STYLES,0,"offense"],["def",t.def,DEF_STYLES,1,"defense"]].forEach(([sd,cur,list,si,lbl])=>{const cv=rosterFit(sd,cur);const alt=list.map(s=>({s,v:rosterFit(sd,s)})).sort((a,b)=>b.v-a.v)[0];
+      if(alt.s!==cur&&alt.v>cv+0.6)pool.push({id:"sch",sd,to:alt.s,title:`🧠 Coach ${hcLast()} is weighing a scheme change`,text:`He's heard your scouting reports on how the roster fits. Should the ${lbl} move from the ${cur} to a ${alt.s}? (Starters' fit ${cv>0?"+":""}${cv.toFixed(1)} → ${alt.v>0?"+":""}${alt.v.toFixed(1)}.) It's his call.`,opts:[[`Recommend the ${alt.s}`,"schYes"],["Stay the course","schNo"]]});});}}
+function resolveRS(e,play){const p=S.roster.find(x=>x.id===e.pid);if(!p)return "He's no longer on the roster.";
+  const hcWants=p.ovr>=depth(p.pos)[(POS_STARTERS[p.pos]||1)-1]?.ovr-2;const follow=R()<followP("hc",0.4);const doPlay=follow?play:hcWants;
+  let m;if(doPlay){p.rs=false;p.mor=clamp(p.mor+10,0,100);p.ovr=Math.min(99,p.ovr+1);m=`${p.fn} ${p.ln} is in the rotation (+morale, +1 OVR from live reps; redshirt burned).`;}
+  else{p.mor=clamp(p.mor-(p.promPT?14:4),0,100);m=`${p.fn} ${p.ln} will redshirt${p.promPT?" — and he remembers the playing-time promise (−morale)":""}.`;}
+  addTrust("hc",follow?0.5:0);
+  return (follow?`Coach ${hcLast()} went with your advice. `:doPlay===play?`Coach ${hcLast()} had already made up his mind — same call. `:`Coach ${hcLast()} saw it differently. `)+m;}
+function resolveSch(e,yes){S.schAsk=S.year;const t=UT();const st=U().staff||[];
+  if(!yes){return `You told Coach ${hcLast()} to stay the course. The ${e.sd==="off"?t.off:t.def} stays.`;}
+  if(R()<followP("hc",0.3)){if(e.sd==="off"){t.off=e.to;if(st[0])st[0].style=e.to;}else{t.def=e.to;if(st[1])st[1].style=e.to;}addTrust("hc",1.5);gainDXP(8);invalidateProj();
+    return `Coach ${hcLast()} bought it. The ${e.sd==="off"?"OC":"DC"} will install the ${e.to} this spring — your scouting just reshaped the depth chart.`;}
+  addTrust("hc",-0.5);return `Coach ${hcLast()} isn't ready to blow up the playbook. Maybe next year — keep building the case.`;}
