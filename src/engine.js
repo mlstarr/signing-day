@@ -1,0 +1,1231 @@
+// ===== ENGINE =====
+let S = null; // game state
+const R = Math.random;
+const rnd=(a,b)=>a+R()*(b-a);
+const rint=(a,b)=>Math.floor(rnd(a,b+1));
+const pick=a=>a[Math.floor(R()*a.length)];
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+function gauss(m=0,s=1){let u=0,v=0;while(!u)u=R();while(!v)v=R();return m+s*Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(R()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+function wpick(items,wf){let tot=0;const ws=items.map(i=>{const w=Math.max(0,wf(i));tot+=w;return w;});let x=R()*tot;for(let i=0;i<items.length;i++){x-=ws[i];if(x<=0)return items[i];}return items[items.length-1];}
+function miles(a1,o1,a2,o2){const r=Math.PI/180,d=Math.sin((a2-a1)*r/2)**2+Math.cos(a1*r)*Math.cos(a2*r)*Math.sin((o2-o1)*r/2)**2;return 3959*2*Math.asin(Math.sqrt(d));}
+const T=id=>S.teams[id];
+const U=()=>S.user;
+const UT=()=>S.teams[S.user.teamId];
+function money(k){if(k>=1000)return "$"+(k/1000).toFixed(k>=10000?1:2).replace(/\.?0+$/,"")+"M";return "$"+Math.round(k)+"K";}
+function phase(){return S.cal[S.phaseIdx];}
+function inSeason(){const p=phase();return p.type==="game";}
+function teamLevel(t){return t.talent*0.55+t.prestige*0.45;}
+
+// ---------- NEW GAME ----------
+function newGame(teamId,dirName,diff){
+  S={v:6,year:2026,phaseIdx:0,teams:{},teamIds:[],nextId:1,news:[],games:[],recruits:[],portal:[],roster:[],ceremonies:[],events:[],weekLog:[],
+     polls:{ap:[],cfp:[],cfpLive:false,apHist:{}},cfpField:null,champs:[],classHist:{},summary:null};
+  S.cal=buildCalendar(S.year);
+  TEAM_ROWS.forEach(r=>{
+    const [id,school,abbr,mascot,conf,st,lat,lon,c1,c2,prestige,nil,fac,acad,talent,coach,rec,dev,game]=r;
+    S.teams[id]={id,school,abbr,mascot,conf,st,lat,lon,c1,c2,prestige,nil,fac,acad,talent,
+      coach:{name:coach,rec,dev,game,hot:0,yrs:COACH_YRS[id]!==undefined?COACH_YRS[id]:0,real:true},w:0,mom:0,base:prestige,pro:[],
+      off:(TEAM_STYLE[id]||[])[0]||wpick(OFF_STYLES.slice(0,4),x=>({"Spread RPO":55,"Pro Style":22,"Power Run":15,"Air Raid":8})[x]),def:(TEAM_STYLE[id]||[])[1]||pick(DEF_STYLES),l:0,cw:0,cl:0,pf:0,pa:0,elo:0,ap:0,cfp:0,apRank:0,cfpRank:0,
+      need:{},target:rint(20,25),hist:[],streak:0};
+    S.teamIds.push(id);
+  });
+  S.user={teamId,name:dirName||"Director",diff:diff||"normal",rep:45,sec:70,hoursMax:40,hours:40,hcMax:2,hc:2,
+    up:{scout:1,staff:1,collective:1},upPts:2,sk:{eval:1,pers:1,rel:1,neg:1,net:1},xp:{eval:0,pers:0,rel:0,neg:0,net:0},
+    lvl:1,dxp:0,pp:1,perks:{},pipe:{st:{},hs:{}},ad:null,goals:[],hist:[],targets:{},bonusNIL:0,yearsAt:0,boosterUsed:false,lastSeason:null,career:[]};
+  S.teamIds.forEach(id=>resetNeeds(T(id)));
+  S.teamIds.forEach(id=>{const t=T(id);t.elo=eloFromTalent(t);t.prev={prestige:t.prestige,nil:t.nil,fac:t.fac};const pp=Math.max(0,Math.round((t.talent-62)/3.2));t.pro=[pp,pp,pp];});
+  genHS();
+  S.user.pipe.st[S.teams[teamId].st]=15;
+  initAD();
+  genRoster();
+  genClass(S.year+1, true);
+  presim();
+  newSeason(true);
+  return S;
+}
+function eloFromTalent(t){return 1500+(t.talent-70)*16+(t.coach.game-75)*3;}
+function resetNeeds(t){POSITIONS.forEach(p=>t.need[p]=rnd(0.5,1.5));}
+
+// ---------- USER ROSTER ----------
+function genPlayer(pos,yr,baseOvr){
+  const ovr=clamp(Math.round(gauss(baseOvr+(yr-2)*3.5,6)),40,97);
+  const we=rint(30,95),chr=rint(25,95);
+  const p={id:S.nextId++,fn:pick(FIRST),ln:pick(LAST),pos,yr,ovr,pot:clamp(ovr+rint(0,Math.max(1,16-yr*3)),ovr,99),
+    we,chr,nil:0,mor:rint(55,90),from:"HS",stars:0,rs:R()<0.3,tr:genTraits(we,chr),hist:[],st:null};
+  p.tr.forEach(x=>{if(R()<0.25+yr*0.15)x.rev=true;});p.ovr0=ovr;return p;
+}
+function genRoster(){
+  const t=UT();S.roster=[];
+  POSITIONS.forEach(pos=>{for(let i=0;i<POS_ROSTER_TARGET[pos];i++){S.roster.push(genPlayer(pos,rint(1,4),t.talent-6));}});
+  // calibrate team overall to the program's real talent level
+  for(let k=0;k<4;k++){const d=t.talent-teamOVR(S.roster);S.roster.forEach(p=>{p.ovr=clamp(Math.round(p.ovr+d),40,99);p.pot=Math.max(p.pot,p.ovr);});}
+  S.roster.forEach(p=>{p.stars=p.ovr>=t.talent+6?(R()<0.5?5:4):p.ovr>=t.talent?4:3;if(t.prestige<55)p.stars=Math.max(2,p.stars-1);});
+  distributePayroll();
+}
+function budgetTotal(){const t=UT();return Math.round(1500+t.nil*1900+(U().up.collective-1)*700+U().bonusNIL+(U().ad?U().ad.nil:0));}
+function distributePayroll(){
+  const pool=budgetTotal()*0.68;const ps=S.roster.slice().sort((a,b)=>b.ovr-a.ovr);
+  const ws=ps.map(p=>Math.pow(Math.max(1,p.ovr-55),2.2)*(p.pos==="QB"?2.2:1));const tot=ws.reduce((a,b)=>a+b,0);
+  ps.forEach((p,i)=>p.nil=Math.round(pool*ws[i]/tot));
+}
+function payroll(){return S.roster.reduce((a,p)=>a+p.nil,0);}
+function pendingNIL(){let s=0;S.recruits.forEach(r=>{if(r.com===U().teamId&&r.nilO)s+=r.nilO;});S.portal.forEach(r=>{if(r.com===U().teamId&&r.nilO)s+=r.nilO;});return s;}
+function budgetLeft(){return budgetTotal()-payroll()-pendingNIL();}
+function depth(pos,roster){return (roster||S.roster).filter(p=>p.pos===pos).sort((a,b)=>b.ovr-a.ovr);}
+function teamOVR(roster){let s=0;POSITIONS.forEach(pos=>{const d=depth(pos,roster);const n=POS_STARTERS[pos];let a=0;for(let i=0;i<n;i++)a+=(d[i]?d[i].ovr:45);s+=POS_WEIGHT[pos]*a/n;});return Math.round(s*10)/10;}
+
+// ---------- RECRUIT CLASS ----------
+function genRecruit(cls){
+  const g=wpick(RECRUIT_GEO,x=>x[1]);
+  const pos=wpick(POSITIONS,p=>POS_SHARE[p]);
+  let tPot=clamp(gauss(70,9.5)+(R()<0.04?rnd(5,12):0),45,99);
+  const tOvr=clamp(tPot-rnd(8,22),38,84);
+  const truth0=tPot*0.66+(tOvr+12)*0.34;const shared=gauss(0,7.2);const pA=truth0+shared+gauss(0,3.8),pB=truth0+shared+gauss(0,3.8);let perc=(pA+pB)/2;
+  let tag=null;const x=R();
+  if(x<0.06){tPot=clamp(tPot+rnd(5,11),45,99);tag="lb";}else if(x<0.11){tPot=clamp(tPot-rnd(5,10),40,99);tag="pk";}
+  const sz=POS_SIZE[pos];const ath=gauss(0,1);
+  const mot=MOTIVES.map(()=>rnd(0.12,0.9));const maj=shuffle(MOTIVES.map((m,i)=>i).filter(i=>MOTIVES[i][0]!=="legacy"));mot[maj[0]]+=1.6;mot[maj[1]]+=0.9;
+  const LI=MOTIVE_IDX.legacy;let leg=null;
+  if(R()<0.12){const near=S.teamIds.filter(id=>miles(T(id).lat,T(id).lon,g[2],g[3])<700&&T(id).prestige>=55);if(near.length){leg=wpick(near,id=>T(id).prestige);mot[LI]=rnd(0.8,1.8);}}
+  if(!leg)mot[LI]=0.01;
+  const lifeP=wpick(["warm","any","cold"],x=>({warm:55,any:32,cold:13})[x]);
+  const offPos=["QB","RB","WR","TE","OL"].includes(pos);
+  const fitP=pos==="K"?null:offPos?wpick(OFF_STYLES,x=>({QB:{"Air Raid":3,"Spread RPO":4,"Pro Style":3,"Power Run":1,"Option":0.3},WR:{"Air Raid":5,"Spread RPO":4,"Pro Style":2,"Power Run":0.5,"Option":0.1},RB:{"Air Raid":0.5,"Spread RPO":3,"Pro Style":3,"Power Run":4,"Option":0.6},TE:{"Air Raid":0.3,"Spread RPO":2,"Pro Style":5,"Power Run":4,"Option":0.3},OL:{"Air Raid":1,"Spread RPO":3,"Pro Style":4,"Power Run":5,"Option":0.5}}[pos][x])):pick(DEF_STYLES);
+  const we0=rint(20,99),chr0=rint(20,99);
+  const ms=mot.reduce((a,b)=>a+b,0);
+  const hsL=(S.hs||[]).filter(h=>h.st===g[0]);const hs=hsL.length?wpick(hsL,h=>h.lvl*Math.pow(h.lvl/50,clamp((perc-66)/12,-1,3))):null;
+  const gpa=+clamp(gauss(2.95+0.22*(mot[6]-0.5),0.42),1.9,4.0).toFixed(2);
+  const r={id:S.nextId++,cls,fn:pick(FIRST),ln:pick(LAST),pos,st:g[0],city:hs?hs.city:pick(g[4]),lat:hs?hs.lat:g[2]+rnd(-1.2,1.2),lon:hs?hs.lon:g[3]+rnd(-1.4,1.4),hs:hs?hs.id:null,gpa,
+    ht:Math.round(sz[0]+gauss(0,1.6)),wt:Math.round(sz[1]+gauss(0,sz[1]*0.06)),forty:+(POS_FORTY[pos]-ath*0.06+gauss(0,0.03)).toFixed(2),
+    tPot:Math.round(tPot),tOvr:Math.round(tOvr),perc,perc0:perc,pA,pB,tag,we:we0,chr:chr0,mis:pick([-1,0,0,0,1]),leg,lifeP,fitP,tr:genTraits(we0,chr0,tag),
+    mot:mot.map(m=>+(m/ms).toFixed(3)),known:0,dec:0,sc:0,int:{},off:[],com:null,hard:false,signed:false,ov:[],ovDone:[],log:[],nilO:0,ss:{g:0},stars:3,rank:0,comp:0.85,pr:0,lastPitch:{},lastTouch:-9,flag:null};
+  return r;
+}
+function genClass(cls,initial){
+  const N=1400;const list=[];for(let i=0;i<N;i++)list.push(genRecruit(cls));
+  S.recruits=list;rerank(true);S.classTick=0;
+  list.forEach(r=>{r.nil=nilMarket(r);if(hasT(r,"brand"))r.nil=Math.round(r.nil*1.5/5)*5;r.dec=decTick(r.stars);});
+  initOffers(list);
+  S.classYear=cls;
+  seedPipelines(list);
+}
+function decTick(st){
+  const d={5:[0.25,0.35,0.3],4:[0.45,0.3,0.2],3:[0.5,0.25,0.2],2:[0.3,0.3,0.25]}[st]||[0.4,0.3,0.2];const x=R();
+  if(x<d[0])return R()<0.25?rint(1,3):rint(4,6);
+  if(x<d[0]+d[1])return rint(8,21);
+  if(x<d[0]+d[1]+d[2])return 22;
+  return rint(25,31);
+}
+function decLabel(r){const d=r.dec,c=S.classTick||0;if(r.com)return null;if(d<=6)return d<=c?"Any day now":"Summer (Jun–Jul)";if(d<=21)return d<=c?"Any day now":"During the season (~Week "+(d-8)+")";if(d===22)return "Early Signing Period (Dec)";return "Late — Signing Day (Feb)";}
+function nilMarket(r){
+  const base={5:900,4:260,3:60,2:15}[r.stars]||15;const posm={QB:2.4,EDGE:1.4,OL:1.2,WR:1.15,CB:1.1,DL:1.1}[r.pos]||1;
+  return Math.round(base*posm*rnd(0.7,1.4)/5)*5;
+}
+function rerank(initial){
+  const list=S.recruits.slice().sort((a,b)=>b.perc-a.perc);
+  const bands=[[32,5,0.9800,1.0000],[360,4,0.8950,0.9799],[1110,3,0.8000,0.8949],[99999,2,0.7000,0.7999]];
+  const posC={};
+  list.forEach((r,i)=>{
+    const rank=i+1;const oldStars=r.stars;
+    let lo=0;for(const b of bands){if(rank<=b[0]){const span=b[0]===99999?400:b[0]-lo;const f=Math.min(1,(rank-lo-1)/span);r.stars=b[1];r.comp=+(b[3]-f*(b[3]-b[2])).toFixed(4);break;}lo=b[0];}
+    r.prevRank=r.rank;r.rank=rank;posC[r.pos]=(posC[r.pos]||0)+1;r.pr=posC[r.pos];
+    if(!initial&&oldStars!==r.stars&&rank<=500){r.flag=r.stars>oldStars?"up":"down";}
+  });
+  ["A","B"].forEach(k=>{const l=S.recruits.slice().sort((a,b)=>(b["p"+k]||b.perc)-(a["p"+k]||a.perc));l.forEach((r,i)=>{r["rk"+k]=i+1;r["st"+k]=i<32?5:i<360?4:i<1110?3:2;});});
+}
+function svcTruth(r){return r.tPot*0.66+(r.tOvr+15)*0.34;}
+function rerankUpdate(label){
+  // services slowly discover late bloomers and overhyped players
+  S.recruits.forEach(r=>{const tr=svcTruth(r);if(r.pA===undefined){r.pA=r.pB=r.perc;}r.pA+=(tr-r.pA)*0.12+gauss(0,1.5);r.pB+=(tr-r.pB)*0.12+gauss(0,1.5);r.perc=(r.pA+r.pB)/2;});
+  const before={};S.recruits.forEach(r=>before[r.id]=r.stars);
+  rerank(false);
+  const ups=S.recruits.filter(r=>r.stars>before[r.id]).sort((a,b)=>a.rank-b.rank);
+  const dn=S.recruits.filter(r=>r.stars<before[r.id]).sort((a,b)=>a.rank-b.rank);
+  addNews(`📈 ${label} rankings update: ${ups.length} recruits moved up a star tier, ${dn.length} moved down.`+(ups[0]?` Biggest riser: ${rName(ups[0])} (${ups[0].pos}) now ${ups[0].stars}★ #${ups[0].rank}.`:""),"rank");
+  const mine=ups.filter(r=>r.com===U().teamId||r.int[U().teamId]>0).slice(0,3);
+  mine.forEach(r=>addNews(`⭐ ${rName(r)} — one of your guys — climbs to ${r.stars}★ (#${r.rank} overall).`,"user"));
+}
+function rName(r){return r.fn+" "+r.ln;}
+
+// ---------- ATTRACTIVENESS ----------
+function grade(t,r,m){
+  switch(m){
+    case "pt":{ if(t.id===U().teamId) return ptGradeUser(r); return clamp(50+(82-t.talent)*1.3+(t.need[r.pos]-1)*40,10,100);}
+    case "nil":{ if(t.id===U().teamId){const ratio=(r.nilO||0)/Math.max(5,r.nil)*(hasPerk("x1")?1.1:1);return clamp(15+ratio*70,10,140);} return clamp(t.nil*10+gauss(0,4),10,100);}
+    case "win": return clamp((t.elo-1250)/6+(t.mom||0)*1.5,10,100)*0.8+t.prestige*0.2;
+    case "prox":{const d=miles(t.lat,t.lon,r.lat,r.lon);let g=d<90?100:d<220?88:d<450?68:d<800?48:d<1400?32:18;if(t.st===r.st)g=Math.min(100,g+10);return g;}
+    case "coach": return t.coach.rec;
+    case "dev": return t.coach.dev*0.5+t.prestige*0.25+clamp(20+proScore(t)*7,0,100)*0.25;
+    case "acad": return t.acad;
+    case "brand": return clamp(t.prestige*0.6+t.fac*0.4+(t.mom||0)*1.2+(t.buzz||0)*1.3,10,100);
+    case "scheme":{if(!r.fitP)return 70;const offPos=["QB","RB","WR","TE","OL"].includes(r.pos);const ts=offPos?t.off:t.def;if(ts===r.fitP)return 100;
+      if(!offPos)return 55;const fam={"Air Raid":"Spread RPO","Spread RPO":"Air Raid","Pro Style":"Power Run","Power Run":"Pro Style"};if(r.fitP==="Option"||ts==="Option")return 25;return fam[r.fitP]===ts?66:38;}
+    case "stab": return clamp(45+Math.min(t.coach.yrs||0,10)*5-Math.max(0,t.coach.hot||0)*10,15,100);
+    case "life":{const c=climate(t);return r.lifeP==="warm"?c:r.lifeP==="cold"?clamp(125-c,30,100):75;}
+    case "legacy": return r.leg===t.id?100:25;
+  }
+  return 50;
+}
+function climate(t){if(t.st==="HI")return 100;return clamp(Math.round(100-(t.lat-28)*4.2),30,100);}
+function proScore(t){return (t.pro||[]).reduce((a,b)=>a+b,0)/Math.max(1,(t.pro||[]).length);}
+function genTraits(we,chr,tag){
+  const pool=[];const add=(k,w)=>pool.push([k,w]);
+  add("gym",we>75?4:we>50?1.2:0.2);add("lazy",we<35?4:we<50?1:0.1);add("film",1.4);add("quick",1.2);add("clutch",1.1);add("iron",1.1);add("inj",0.9);
+  add("lead",chr>78?3:chr>55?1:0.2);add("party",chr<35?4:chr<50?1:0.1);add("diva",chr<55?1.4:0.5);add("loyal",chr>70?2:0.7);add("home",1);add("brand",0.8);add("raw",tag==="lb"?5:0.8);
+  const n=R()<0.35?1:R()<0.75?2:3;const out=[];
+  for(let i=0;i<n;i++){const left=pool.filter(p=>!out.some(o=>o.k===p[0])&&!(p[0]==="gym"&&out.some(o=>o.k==="lazy"))&&!(p[0]==="lazy"&&out.some(o=>o.k==="gym"))&&!(p[0]==="iron"&&out.some(o=>o.k==="inj"))&&!(p[0]==="inj"&&out.some(o=>o.k==="iron")));
+    const k=wpick(left,p=>p[1])[0];out.push({k,rev:false});}
+  return out;
+}
+function hasT(p,k){return p.tr&&p.tr.some(x=>x.k===k);}
+function revealTrait(p,how,chance,who){
+  // how: film | eval | talk | any
+  const hid=(p.tr||[]).filter(x=>!x.rev&&(how==="any"||TRAITS[x.k].vis===how));
+  if(hasPerk("e3"))chance*=1.5;
+  if(!hid.length||R()>chance)return null;const x=pick(hid);x.rev=true;
+  if(who)addNews(`🔍 Trait revealed: ${who} — ${TRAITS[x.k].i} ${TRAITS[x.k].n}.`,"user");
+  return x;
+}
+function traitMult(p,stage){let m=1;(p.tr||[]).forEach(x=>{const t=TRAITS[x.k];if(t.dev)m*=t.dev;if(stage==="early"&&t.early)m*=t.early;if(stage==="late"&&t.late)m*=t.late;});return m;}
+function attract(t,r){let s=0;MOTIVES.forEach((m,i)=>s+=r.mot[i]*grade(t,r,m[0]));const v=s/100;return v*v*1.5;}
+function ptGradeUser(r){
+  const proj=projRoster().filter(p=>p.pos===r.pos).map(p=>p.ovr);
+  const myProj=r.portal?r.tOvr:r.tOvr+8;
+  const n=POS_STARTERS[r.pos];let better=proj.filter(o=>o>myProj).length;
+  if(!r.portal){const uc=userComByPos();better+=(uc[r.pos]||[]).filter(pp=>pp>r.perc).length;}
+  if(better<n) return 98; if(better<n+1) return 85; if(better<n+3) return 62; if(better<n+5) return 42; return 22;
+}
+let _projCache=null,_projKey=-1;
+function projRoster(){const key=S.phaseIdx*1000+S.roster.length;if(_projKey===key&&_projCache)return _projCache;_projKey=key;
+  _projCache=S.roster.filter(p=>p.yr<4).map(p=>({pos:p.pos,ovr:p.ovr+3}));return _projCache;}
+function invalidateProj(){_projKey=-1;}
+let _ucKey=null,_uc=null;
+function userComByPos(){const uid=U().teamId;const k=S.tick+"|"+S.recruits.length;if(_ucKey===k&&_uc)return _uc;_ucKey=k;_uc={};S.recruits.forEach(x=>{if(x.com===uid)(_uc[x.pos]=_uc[x.pos]||[]).push(x.perc);});return _uc;}
+
+// ---------- OFFERS ----------
+function recruitLevel(r){return 100-r.rank/1400*58;}
+function initOffers(list){
+  const ids=S.teamIds;
+  list.forEach(r=>{
+    const R0=recruitLevel(r);
+    const cands=ids.filter(id=>{const t=T(id);if(minGPA(t)-r.gpa>0.15)return false;const L=teamLevel(t);if(L<=R0+9&&L>=R0-13)return true;const d=miles(t.lat,t.lon,r.lat,r.lon);if(d<260&&L>=R0-22&&L<=R0+16)return true;return L>R0+9&&R()<0.03;});
+    const want={5:rint(16,26),4:rint(9,18),3:rint(4,10),2:rint(1,4)}[r.stars];
+    const scored=cands.map(id=>{const t=T(id);const d=miles(t.lat,t.lon,r.lat,r.lon);return {id,s:(1/(1+d/450))*(0.5+R())*(t.need[r.pos])*(1+Math.max(0,teamLevel(t)-R0)/40)};}).sort((a,b)=>b.s-a.s);
+    r.off=scored.slice(0,want).map(x=>x.id);
+    r.off.forEach(id=>{r.int[id]=Math.round(rnd(3,12)*attract(T(id),r)*2);});
+  });
+}
+function aiAddOffers(){
+  const counts=commitCounts();
+  S.teamIds.forEach(id=>{
+    if(id===U().teamId&&!S._presim)return;const t=T(id);const open=t.target-(counts[id]||0);if(open<=2)return;
+    const L=teamLevel(t);
+    const mg=minGPA(t);const pool=S.recruits.filter(r=>!r.com&&!r.off.includes(id)&&recruitLevel(r)>=L-11&&recruitLevel(r)<=L+9&&r.gpa>=mg-0.15);
+    for(let k=0;k<Math.min(3,open/3);k++){if(!pool.length)break;const r=wpick(pool,x=>t.need[x.pos]/(1+miles(t.lat,t.lon,x.lat,x.lon)/500)*(recruitLevel(x)));
+      if(!r.off.includes(id)){r.off.push(id);r.int[id]=(r.int[id]||0)+Math.round(5*attract(t,r));}}
+  });
+}
+function commitCounts(){const c={};S.recruits.forEach(r=>{if(r.com)c[r.com]=(c[r.com]||0)+1;});return c;}
+
+// ---------- RECRUITING TICK ----------
+const DIFF_MULT={easy:0.8,normal:1,hard:1.22};
+function commitThreshold(r){return 55+r.stars*24;}
+function buildPrio(){
+  // each AI staff concentrates effort on its best realistic targets
+  const counts=commitCounts();const by={};
+  S.recruits.forEach(r=>{if(r.signed||r.com)return;r.off.forEach(id=>{(by[id]=by[id]||[]).push(r);});});
+  S._prio={};S._prioTick=S.tick;
+  Object.keys(by).forEach(id=>{const t=T(id);if(!t)return;const open=Math.max(0,t.target-(counts[id]||0));
+    const list=by[id].map(r=>({r,v:recruitLevel(r)*t.need[r.pos]*(1+(r.int[id]||0)/200)})).sort((a,b)=>b.v-a.v);
+    S._prio[id]=new Set(list.slice(0,Math.ceil(open*2.6)+2).map(x=>x.r.id));});
+}
+function recruitTick(intensity,ctx){
+  const uid=U().teamId;const counts=commitCounts();const dm=DIFF_MULT[U().diff]||1;
+  if(!S._prio||S.tick-S._prioTick>=2)buildPrio();
+  const evts=[];const ct=S.classTick||0;
+  S.recruits.forEach(r=>{
+    if(r.signed)return;
+    let uLead=false;if(!S._presim&&r.int[uid]){uLead=r.off.every(id=>id===uid||(r.int[id]||0)<=r.int[uid]);}
+    for(const id of r.off){
+      const t=T(id);if(!t)continue;
+      if(id===uid&&!S._presim){
+        const tg=!!S.user.targets[r.id]||r.com===uid;r.int[id]=(r.int[id]||0)+intensity*pipeMult(r)*(tg?7.7*(1+Math.max(0,r.stars-3)*0.45):2.4)*attract(t,r)*(r.com===uid?1.4:1)*rnd(0.8,1.2);
+        if(S.tick-r.lastTouch>3)r.int[id]*=0.985;
+        continue;
+      }
+      const full=(counts[id]||0)>=t.target;
+      let eff=full?0.1:(S._prio[id]&&S._prio[id].has(r.id)?1.6*(1+Math.max(0,r.stars-3)*0.6):0.3);
+      if(uLead&&r.stars>=4)eff*=1.35; // rival staffs pile in on your blue-chip leads
+      if(uLead&&isRival(id,uid))eff*=1.2;
+      if(r.com&&r.com!==id)eff*=(r.com===uid?0.55:0.4);
+      if(r.com===id)eff=1.1;
+      r.int[id]=(r.int[id]||0)+intensity*6*attract(t,r)*eff*rnd(0.55,1.45)*dm;
+    }
+    if(r.int[uid]&&!r.off.includes(uid))r.int[uid]=Math.min(r.int[uid],40);
+    const ranked=r.off.map(id=>[id,r.int[id]||0]).sort((a,b)=>b[1]-a[1]);
+    if(!ranked.length)return;
+    if(!r.com){
+      const [top,tp]=ranked[0];const sp=ranked[1]?ranked[1][1]:0;
+      const due=ct>=r.dec;
+      const early=!due&&tp>=commitThreshold(r)&&tp>=sp*1.7&&R()<0.1;
+      if(due||early){
+        // pick best school that still has room
+        let pickT=ranked.find(([id,p])=>id===uid||(counts[id]||0)<T(id).target+2);
+        if(!S._presim&&hasPerk("c4")&&r.off.includes(uid)&&(r.int[uid]||0)>=tp*0.9&&pickT&&pickT[0]!==uid)pickT=[uid,r.int[uid]];
+        if(!pickT||pickT[1]<20){r.dec=ct+1;return;}
+        if(due&&!early&&ranked[1]&&pickT[0]===top&&tp<sp*1.06&&R()<0.45){r.dec=ct+1;return;} // torn — waits a week
+        doCommit(r,pickT[0],ranked,evts);counts[pickT[0]]=(counts[pickT[0]]||0)+1;
+      }
+    }else{
+      const cur=r.int[r.com]||0;const best=ranked.find(x=>x[0]!==r.com);
+      if(best&&best[1]>cur*1.22&&best[1]-cur>25&&R()<(r.hard?0.04:0.11)*(ctx.flipMult||1)*(hasT(r,"loyal")?0.35:1)){
+        if(best[0]===uid||(counts[best[0]]||0)<T(best[0]).target+2){const old=r.com;doCommit(r,best[0],ranked,evts,old);}
+      }
+    }
+  });
+  return evts;
+}
+function doCommit(r,tid,ranked,evts,oldTid){
+  const uid=U().teamId;r.com=tid;r.comWk=S.tick;r.hard=r.ovDone.includes(tid);
+  r.int[tid]=(r.int[tid]||0)+15;
+  const t=T(tid);
+  if(!oldTid||true){const bz=r.stars>=5?1.2:r.stars===4?(r.rank<=100?0.5:0.3):0.05;t.buzz=Math.min(10,(t.buzz||0)+bz);
+    if(tid===uid&&!S._presim&&r.stars>=4&&S.summary)S.summary.lines.push(`💥 Landing ${rName(r)} (#${r.rank}) has other recruits taking notice — program buzz ${t.buzz.toFixed(1)}.`);}
+  if(oldTid&&!S._presim){if(tid===uid&&isRival(oldTid,uid)){gainPC(3);gainDXP(15);addNews(`⚔️ You flipped ${rName(r)} away from RIVAL ${T(oldTid).school}!`,"user");}
+    if(oldTid===uid&&isRival(tid,uid)){U().sec=clamp(U().sec-2,0,100);addNews(`⚔️ Rival ${t.school} flipped ${rName(r)} away from you. Boosters are not happy.`,"user");}}
+  if(oldTid){
+    addNews(`🔄 FLIP! ${r.stars}★ ${r.pos} ${rName(r)} (#${r.rank}) flips from ${T(oldTid).school} to ${t.school}.`,oldTid===uid||tid===uid?"user":"flip",tid);
+    if(oldTid===uid)evts.push({k:"lost",r,t:tid});if(tid===uid)evts.push({k:"flip",r,t:oldTid});
+  }else{
+    if(r.rank<=150||tid===uid||r.off.includes(uid))addNews(`🔒 ${r.stars}★ ${r.pos} ${rName(r)} (#${r.rank}, ${r.city}, ${r.st}) commits to ${t.school}.`,tid===uid?"user":"commit",tid);
+    if(tid===uid)evts.push({k:"commit",r});
+  }
+  const top3=ranked.slice(0,3).map(x=>x[0]);
+  if(!S._presim&&top3.includes(uid)&&r.off.includes(uid)&&!oldTid){
+    S.ceremonies.push({rid:r.id,hats:shuffle(top3.slice()),pick:tid});
+    if(tid!==uid)evts.push({k:"miss",r,t:tid});
+  }
+}
+function decommit(r,why){const old=r.com;r.com=null;r.hard=false;if(r.int[old])r.int[old]*=0.55;
+  addNews(`💔 ${r.stars}★ ${r.pos} ${rName(r)} decommits from ${T(old).school}${why?" — "+why:""}.`,old===U().teamId?"user":"flip",old);
+}
+function signCommits(prob){let n=0;S.recruits.forEach(r=>{if(r.com&&!r.signed&&R()<prob){if(r.com===U().teamId&&!userSignCheck(r))return;r.signed=true;n++;}});return n;}
+function forceSignAll(){
+  S.recruits.forEach(r=>{
+    if(r.signed)return;
+    if(!r.com){const ranked=r.off.map(id=>[id,r.int[id]||0]).sort((a,b)=>b[1]-a[1]);
+      if(ranked.length&&ranked[0][1]>10)doCommit(r,ranked[0][0],ranked,[]);}
+    if(r.com===U().teamId&&!userSignCheck(r)){const ranked=r.off.filter(id=>id!==U().teamId).map(id=>[id,r.int[id]||0]).sort((a,b)=>b[1]-a[1]);if(ranked.length)doCommit(r,ranked[0][0],ranked,[]);}
+    if(r.com)r.signed=true;
+  });
+}
+
+// ---------- PRESIM ----------
+function presim(){
+  S._presim=true;S.weekNo=0;S.tick=0;
+  for(let i=1;i<=6;i++){S.classTick=i;S.tick=i;recruitTick(i>=4?1.6:1.15,{});if(i===4||i===5)aiOVs();if(i%2===0)aiAddOffers();}
+  // trim inherited user offers to a manageable board
+  const uid=U().teamId;const mine=S.recruits.filter(r=>r.off.includes(uid)&&!r.com).sort((a,b)=>(b.int[uid]||0)-(a.int[uid]||0));
+  mine.slice(45).forEach(r=>{r.off=r.off.filter(x=>x!==uid);delete r.int[uid];});
+  S.recruits.forEach(r=>{if(r.int[uid])r.int[uid]*=0.8;});
+  // make sure your program has a realistic summer haul already in the fold
+  const t=UT();const want=Math.round(P4.includes(t.conf)||t.conf==="Independent"?rnd(8,12):rnd(4,7));
+  let have=S.recruits.filter(r=>r.com===uid).length;
+  const pool=S.recruits.filter(r=>!r.com&&r.off.includes(uid)).sort((a,b)=>(b.int[uid]||0)-(a.int[uid]||0));
+  for(const r of pool){if(have>=want)break;r.int[uid]=Math.max(r.int[uid],...r.off.map(id=>r.int[id]||0))+10;r.com=uid;r.comWk=0;have++;}
+  pool.filter(r=>!r.com).slice(0,20).forEach(r=>S.user.targets[r.id]=1);
+  S._presim=false;S.ceremonies=[];S.news=[];
+}
+
+// ---------- SCHEDULE ----------
+function genSchedule(){
+  for(let attempt=0;attempt<60;attempt++){const g=tryGenSchedule();if(g){S.games=g;return;}}
+  S.games=tryGenSchedule(true);
+}
+function tryGenSchedule(force){
+  const games=[];const busy={};S.teamIds.forEach(id=>busy[id]=new Set());
+  const cnt={};S.teamIds.forEach(id=>cnt[id]=0);const met=new Set();
+  const key=(a,b)=>a<b?a+"|"+b:b+"|"+a;
+  const add=(a,b,wk,conf)=>{const h=R()<0.5?a:b;games.push({id:S.nextId++,wk,h,a:h===a?b:a,hs:0,as:0,done:false,kind:"reg",conf});busy[a].add(wk);busy[b].add(wk);cnt[a]++;cnt[b]++;met.add(key(a,b));};
+  RIVALS.forEach(([a,b])=>{if(T(a)&&T(b)&&!busy[a].has(13)&&!busy[b].has(13))add(a,b,13,T(a).conf===T(b).conf&&T(a).conf!=="Independent");});
+  RIVAL_EXTRA.forEach(([a,b])=>{if(!T(a)||!T(b)||met.has(key(a,b)))return;const sameC=T(a).conf===T(b).conf&&T(a).conf!=="Independent";
+    if(sameC&&games.filter(g=>g.conf&&(g.h===a||g.a===a)).length>=CONF_GAMES[T(a).conf]-1)return;
+    const w=shuffle([3,4,5,6,7,8,9,10,11,12]).find(w=>!busy[a].has(w)&&!busy[b].has(w));if(w!==undefined)add(a,b,w,sameC);});
+  const confPairs=[];
+  Object.keys(CONF_GAMES).forEach(conf=>{
+    const ids=shuffle(S.teamIds.filter(id=>T(id).conf===conf));const k=CONF_GAMES[conf];
+    const arr=ids.slice();if(arr.length%2)arr.push(null);const n=arr.length;
+    const rounds=[];const rot=arr.slice(1);
+    for(let r=0;r<n-1;r++){const cur=[arr[0]].concat(rot);const pr=[];for(let i=0;i<n/2;i++){const a=cur[i],b=cur[n-1-i];if(a&&b)pr.push([a,b]);}rounds.push(pr);rot.unshift(rot.pop());}
+    shuffle(rounds);
+    const need={};ids.forEach(id=>need[id]=k);
+    ids.forEach(id=>{games.forEach(g=>{if(g.conf&&(g.h===id||g.a===id))need[id]--;});});
+    for(const pr of rounds){for(const [a,b] of pr){if(need[a]>0&&need[b]>0&&!met.has(key(a,b))){confPairs.push([a,b]);need[a]--;need[b]--;met.add(key(a,b));}}}
+  });
+  const confCount={};S.teamIds.forEach(id=>confCount[id]=0);
+  confPairs.forEach(([a,b])=>{confCount[a]++;confCount[b]++;});
+  const left={};S.teamIds.forEach(id=>left[id]=12-cnt[id]-confCount[id]);
+  const ncPairs=[];
+  const order=shuffle(S.teamIds.slice());
+  for(const a of order){
+    let guard=0;
+    while(left[a]>0&&guard++<30){
+      const ta=T(a);
+      const opts=S.teamIds.filter(b=>b!==a&&left[b]>0&&(T(b).conf!==ta.conf||ta.conf==="Independent")&&!met.has(key(a,b)));
+      if(!opts.length||R()<(P4.includes(ta.conf)?0.26:0.1)){ncPairs.push([a,"FCS"]);left[a]--;continue;}
+      const b=wpick(opts,x=>{const tb=T(x);const dl=Math.abs(teamLevel(tb)-teamLevel(ta));return 1/(1+dl/15)+(P4.includes(ta.conf)&&!P4.includes(tb.conf)?0.8:0);});
+      ncPairs.push([a,b]);left[a]--;left[b]--;met.add(key(a,b));
+    }
+  }
+  const assign=(a,b,pref,conf)=>{
+    const wks=shuffle([0,1,2,3,4,5,6,7,8,9,10,11,12]).sort((x,y)=>pref(x)-pref(y));
+    for(const w of wks){if(!busy[a].has(w)&&(b==="FCS"||!busy[b].has(w))){
+      if(b==="FCS"){games.push({id:S.nextId++,wk:w,h:a,a:"FCS",fcs:pick(FCS_OPPS),hs:0,as:0,done:false,kind:"reg"});busy[a].add(w);}
+      else{const h=R()<0.5?a:b;games.push({id:S.nextId++,wk:w,h,a:h===a?b:a,hs:0,as:0,done:false,kind:"reg",conf});busy[a].add(w);busy[b].add(w);}
+      return true;}}
+    return false;
+  };
+  shuffle(ncPairs);shuffle(confPairs);
+  // conference games first (harder to place), then non-conference
+  for(const [a,b] of confPairs){if(!assign(a,b,w=>(w>=4?0:1)+R()*0.5,true)&&!force)return null;}
+  for(const [a,b] of ncPairs){if(!assign(a,b,w=>(w<=3?0:1)+R()*0.5,false)&&!force)return null;}
+  games.sort((x,y)=>x.wk-y.wk);
+  return games;
+}
+
+// ---------- GAME SIM ----------
+function teamPower(t){let b=0;if(t.id===U().teamId){t.talent=teamOVR(S.roster);b=starterTraitBonus();}return t.talent+(t.coach.game-78)*0.22+b+(t.mom||0)*0.08;}
+function starterTraitBonus(){let b=0;POSITIONS.forEach(pos=>{depth(pos).slice(0,POS_STARTERS[pos]).forEach(p=>{(p.tr||[]).forEach(x=>{if(TRAITS[x.k].game)b+=TRAITS[x.k].game*(pos==="QB"?2:0.4);});if(p.susp)b-=pos==="QB"?3:0.5;});});return clamp(b,-4,4);}
+function fixScore(x){x=Math.round(x);if(x<0)x=0;const m={1:0,2:3,4:3,5:6,8:7,11:10,12:13,15:14,18:17,19:20,22:21,25:24,26:27,29:28,32:31,33:34,36:35,39:38,40:41,43:42,46:45,47:48,50:49,53:52,54:55,57:56,60:59};return m[x]!==undefined?m[x]:x;}
+function simGame(g){
+  if(g.done)return g;
+  const h=T(g.h);let hp=teamPower(h),ap;
+  let aT=null;if(g.a==="FCS"){ap=rnd(42,58);}else{aT=T(g.a);ap=teamPower(aT);}
+  const hfa=g.neutral?0:2.8;
+  const riv=aT&&isRival(g.h,g.a);if(riv)g.riv=true;
+  const margin=(hp-ap)*(riv?0.85:1.05)+hfa+gauss(0,riv?15.5:13.5);
+  const total=clamp(gauss(52,12),13,99);
+  let hs=fixScore((total+margin)/2),as=fixScore((total-margin)/2);
+  if(hs===as){if(R()<0.5+margin/40)hs+=pick([3,7,6]);else as+=pick([3,7,6]);g.ot=true;}
+  g.hs=hs;g.as=as;g.done=true;
+  const hw=hs>as;
+  h.pf+=hs;h.pa+=as;if(hw)h.w++;else h.l++;
+  if(aT){aT.pf+=as;aT.pa+=hs;if(hw)aT.l++;else aT.w++;
+    if(g.kind==="reg"&&g.conf){if(hw){h.cw++;aT.cl++;}else{h.cl++;aT.cw++;}}
+    momentum(h,aT,hw);momentum(aT,h,!hw);
+    if(riv&&g.kind==="reg"){const W=hw?h:aT,L=hw?aT:h;W.mom=clamp(W.mom+1.6,-10,10);L.mom=clamp(L.mom-1.6,-10,10);W.rivW=(W.rivW||0)+1;L.rivL=(L.rivL||0)+1;
+      const k=[h.id,aT.id].sort().join("|");S.series=S.series||{};S.series[k]=S.series[k]||{};S.series[k][W.id]=(S.series[k][W.id]||0)+1;
+      S.recruits.forEach(r=>{if(r.signed||!r.off.includes(W.id)||!r.off.includes(L.id))return;r.int[W.id]=(r.int[W.id]||0)*1.06;r.int[L.id]=(r.int[L.id]||0)*0.95;});
+      if(W.apRank||L.apRank||W.id===U().teamId||L.id===U().teamId)addNews(`⚔️ Rivalry: ${W.school} beats ${L.school} ${Math.max(hs,as)}-${Math.min(hs,as)}. Head-to-head recruits lean ${W.school}.`,W.id===U().teamId||L.id===U().teamId?"user":"game");}
+    const ea=1/(1+Math.pow(10,(aT.elo-h.elo-hfa*8)/400));const res=hw?1:0;const mov=Math.abs(hs-as);
+    const k=34*Math.log(mov+1)*(2.2/(((hw?h.elo-aT.elo:aT.elo-h.elo))*0.001+2.2));
+    h.elo+=k*(res-ea);aT.elo-=k*(res-ea);
+  }else{ if(!hw){h.elo-=45;} else h.elo+=Math.min(4,(hs-as)/10); }
+  return g;
+}
+function momentum(t,o,won){
+  const ranked=o.apRank&&o.apRank<=25;const iR=t.apRank&&t.apRank<=25;
+  let d=won?(ranked?2.4:o.elo>t.elo?1.4:0.6):(iR&&!ranked?-2.4:ranked?-0.6:-1.5);
+  t.mom=clamp((t.mom||0)*0.85+d,-10,10);
+}
+function teamGames(id){return S.games.filter(g=>g.h===id||g.a===id);}
+function gameLine(g,id){
+  const home=g.h===id;const opp=home?g.a:g.h;const os=home?g.as:g.hs;const ms=home?g.hs:g.as;
+  const oname=opp==="FCS"?g.fcs:T(opp).school;return {opp,oname,home,ms,os,w:ms>os,done:g.done};
+}
+
+// ---------- POLLS ----------
+function updatePolls(){
+  const ids=S.teamIds;const g5pen=t=>(t.conf==="Independent"||P4.includes(t.conf))?0:-55;
+  ids.forEach(id=>{const t=T(id);const raw=t.elo+7*t.w-36*t.l+g5pen(t);t.ap=(S.weekNo<=0||!t.ap)?raw:0.72*raw+0.28*t.ap;});
+  const ap=ids.slice().sort((a,b)=>T(b).ap-T(a).ap);ap.forEach((id,i)=>T(id).apRank=i<25?i+1:0);
+  S.polls.prevAp=S.polls.ap.slice();S.polls.ap=ap.slice(0,25);
+  ids.forEach(id=>{const t=T(id);let sos=0,n=0,qw=0;teamGames(id).forEach(g=>{if(!g.done||g.a==="FCS"||g.kind==="bowl")return;const o=T(g.h===id?g.a:g.h);sos+=o.elo;n++;const L=gameLine(g,id);if(L.w&&o.apRank)qw+=1+(25-o.apRank)/25;});
+    sos=n?sos/n:1500;t.sos=sos;
+    t.cfp=t.elo*0.62+11*t.w-44*t.l+(sos-1500)*0.35+14*qw+g5pen(t)*1.1;});
+  const cfp=ids.slice().sort((a,b)=>T(b).cfp-T(a).cfp);cfp.forEach((id,i)=>T(id).cfpRank=i<25?i+1:0);
+  S.polls.prevCfp=S.polls.cfp.slice();S.polls.cfp=cfp.slice(0,25);
+}
+function rankStr(id,useCfp){const t=T(id);const r=(useCfp&&S.polls.cfpLive)?t.cfpRank:t.apRank;return r?"#"+r+" ":"";}
+function standings(conf){
+  return S.teamIds.filter(id=>T(id).conf===conf).sort((a,b)=>{const A=T(a),B=T(b);const pa=A.cw/Math.max(1,A.cw+A.cl),pb=B.cw/Math.max(1,B.cw+B.cl);if(pb!==pa)return pb-pa;const oa=A.w/Math.max(1,A.w+A.l),ob=B.w/Math.max(1,B.w+B.l);if(ob!==oa)return ob-oa;return B.cfp-A.cfp;});
+}
+
+// ---------- SEASON FLOW ----------
+function newSeason(first){
+  S.teamIds.forEach(id=>{const t=T(id);t.mom=(t.mom||0)*0.4;t.rivW=0;t.rivL=0;t.bowl=null;t.cfpW=0;t.w=t.l=t.cw=t.cl=t.pf=t.pa=0;t.apRank=0;t.cfpRank=0;t.ap=0;t.champ=null;t.streak=0;t.elo=first?eloFromTalent(t):(t.elo*0.4+eloFromTalent(t)*0.6);});
+  UT().talent=teamOVR(S.roster);
+  S.polls={ap:[],cfp:[],cfpLive:false};S.cfpField=null;S.weekNo=0;
+  genSchedule();
+  updatePolls();
+  S.preAp=S.polls.ap.slice();
+  setGoals();
+  const t=UT();
+  addNews(`🏈 ${S.year} season preview: ${t.school} opens ${t.apRank?"ranked #"+t.apRank+" in the AP preseason poll":"unranked in the AP preseason poll"}. Head coach ${t.coach.name}: REC ${t.coach.rec} · DEV ${t.coach.dev} · GAME ${t.coach.game}.`,"user");
+  addNews(`🗳️ AP Preseason Top 5: ${S.polls.ap.slice(0,5).map((id,i)=>(i+1)+". "+T(id).school).join(", ")}.`,"rank");
+}
+function setGoals(){
+  const t=UT();
+  const order=S.teamIds.slice().sort((a,b)=>teamLevel(T(b))-teamLevel(T(a)));const exp=order.indexOf(t.id)+1;
+  const tgt=exp<=3?5:exp<=8?10:exp<=15?15:exp<=25?25:exp<=40?40:exp<=60?55:70;
+  const fours=t.prestige>=85?8:t.prestige>=70?4:t.prestige>=55?2:1;
+  const loc=t.prestige>=70?2:1;
+  S.user.goals=[
+    {k:"rank",label:`Finish with a Top ${tgt} recruiting class`,v:tgt},
+    {k:"blue",label:`Sign ${fours}+ blue-chip (4★/5★) recruits`,v:fours},
+    {k:"budget",label:`Stay within the player-comp budget`,v:0},
+    {k:"local",label:`Sign ${loc} in-state prospect${loc>1?"s":""} (${STATE_NAMES[t.st]||t.st}, 3★+)`,v:loc},
+  ];
+}
+function goalStatus(){
+  const uid=U().teamId;const mine=S.recruits.filter(r=>r.com===uid);const cr=classRankings();const rk=cr.findIndex(x=>x.id===uid)+1;
+  const blue=mine.filter(r=>r.stars>=4).length;const st=UT().st;const loc=mine.filter(r=>r.st===st&&r.stars>=3).length;
+  return S.user.goals.map(g=>{let cur,ok;
+    if(g.k==="rank"){cur="#"+(rk||"—");ok=rk>0&&rk<=g.v;}
+    else if(g.k==="blue"){cur=blue;ok=blue>=g.v;}
+    else if(g.k==="budget"){cur=money(budgetLeft())+" left";ok=budgetLeft()>=0;}
+    else {cur=loc;ok=loc>=g.v;}
+    return {...g,cur,ok};});
+}
+function weekGames(wk){return S.games.filter(g=>g.wk===wk&&g.kind==="reg");}
+function userGame(wk){return S.games.find(g=>g.wk===wk&&(g.h===U().teamId||g.a===U().teamId)&&g.kind==="reg");}
+
+// ---------- ADVANCE ----------
+function advance(){
+  const p=phase();const sum={title:p.label+" — "+p.date+(p.type==="game"||p.type==="pre"?", "+S.year:""),lines:[],my:null};S.summary=sum;
+  S.weekNo=(S.weekNo||0)+1;S.tick=(S.tick||0)+1;S.classTick=(S.classTick||0)+1;
+  S.teamIds.forEach(id=>{const t=T(id);if(t.buzz)t.buzz=Math.round(t.buzz*0.88*100)/100;});
+  let evts=[];
+  if(p.type==="pre"){evts=recruitTick(1.0,{commitP:0.16});S.weekNo=0;}
+  if(p.type==="game"){
+    resolveOVs(p);
+    const gs=weekGames(p.week);gs.filter(g=>!g.done).forEach(simGame);
+    const ug=userGame(p.week);
+    if(ug){const L=gameLine(ug,U().teamId);sum.my=`${L.w?"✅ WIN":"❌ LOSS"} ${L.ms}-${L.os} ${L.home?"vs":"at"} ${L.opp==="FCS"?L.oname:rankStr(L.opp)+L.oname}`;
+      addNews(`${L.w?"✅":"❌"} ${UT().school} ${L.w?"beats":"falls to"} ${L.oname} ${L.ms}-${L.os}.`,"user");
+      UT().streak=L.w?Math.max(1,UT().streak+1):Math.min(-1,UT().streak-1);moraleAfterGame(L.w);}
+    else sum.my="😴 Bye week — extra time on the road recruiting.";
+    upsetNews(gs);
+    weeklyProgram(sum,ug);
+    S.weekNo=p.week+1;
+    updatePolls();
+    if(p.week>=9){S.polls.cfpLive=true;}
+    if(p.week===9)addNews(`📋 The first College Football Playoff rankings are out. Top 4: ${S.polls.cfp.slice(0,4).map(id=>T(id).school).join(", ")}.`,"rank");
+    evts=recruitTick(1.0,{commitP:0.16});
+    seniorStats();
+    if(p.week===5)rerankUpdate("Midseason");
+    if(p.week===11)rerankUpdate("Late-season");
+    if(p.week%3===1)aiAddOffers();
+  }
+  if(p.type==="esp"){
+    evts=recruitTick(1.4,{commitP:0.4,commitMult:0.8});
+    const n=signCommits(0.86);
+    const uid=U().teamId;const mineS=S.recruits.filter(r=>r.signed&&r.com===uid).length;
+    addNews(`✍️ Early Signing Period: ${n} prospects signed nationally. ${UT().school} inked ${mineS}.`,"user");
+    sum.lines.push(`✍️ You signed ${mineS} recruits in the Early Signing Period.`);
+  }
+  if(p.type==="ccg"){playCCGs(sum);updatePolls();evts=recruitTick(0.5,{commitP:0.1});}
+  if(p.type==="sel"){selectCFP(sum);playBowls(sum);coachingCarousel(sum);rerankUpdate("Final regular-season");}
+  if(p.type==="cfp"){playCFPRound(p.round,sum);if(p.round===4)programPerception(sum);evts=p.round<=2?recruitTick(0.4,{commitP:0.12}):[];}
+  if(p.type==="portal"){
+    if(!S.portalOpen)openPortal(sum);
+    portalTick(p.key==="portal2",sum);
+  }
+  if(p.type==="nsd"){evts=recruitTick(1.0,{commitP:0.5,commitMult:0.7});forceSignAll();closeClass(sum);}
+  if(p.type==="off"||p.type==="ov"){
+    if(p.key==="spring1")springProgression(sum);
+    if(p.type==="ov"){resolveOVs(p);aiOVs();}
+    const it=p.type==="ov"?1.6:1.15;
+    evts=recruitTick(it,{commitP:p.key==="jul"?0.3:p.type==="ov"?0.26:0.1,commitMult:p.key==="spring1"?1.2:1});
+    if(p.key==="spring2")aiAddOffers();
+    if(p.key==="spring3"){rerankUpdate("Spring");aiAddOffers();}
+  }
+  evts.forEach(e=>{
+    if(e.k==="commit")sum.lines.push(`🔒 COMMIT: ${e.r.stars}★ ${e.r.pos} ${rName(e.r)} (#${e.r.rank}) is coming to ${UT().school}!`);
+    if(e.k==="flip")sum.lines.push(`🔄 You flipped ${rName(e.r)} from ${T(e.t).school}!`);
+    if(e.k==="lost")sum.lines.push(`💔 ${rName(e.r)} flipped away to ${T(e.t).school}.`);
+    if(e.k==="miss")sum.lines.push(`😞 ${rName(e.r)} chose ${T(e.t).school} over you.`);
+  });
+  if(evts.some(e=>e.k==="commit"||e.k==="flip")){U().rep=clamp(U().rep+0.4,0,100);}
+  evts.forEach(e=>{if(e.k==="commit"||e.k==="flip"){gainXP("pers",3+e.r.stars);gainXP("rel",2+e.r.stars);gainDXP(e.r.stars*6+(e.k==="flip"?10:0));if(e.r.stars>=4)gainPC(1.5);growPipe(e.r,4,1.5);
+    const ai=admitIssue(e.r,U().teamId);if(ai)sum.lines.push(`⚠️ ${rName(e.r)} has an admissions issue (${ai}). He'll need a waiver at signing — ${waiversLeft()} left.`);}});
+  if(p.key==="spring2")nflDraft(sum);
+  maybeEvent();
+  S.phaseIdx++;
+  if(S.phaseIdx>=S.cal.length){rollYear(sum);}
+  if(phase().key==="portal1"&&!S.portalOpen)openPortal(sum);
+  U().hours=hoursPerWeek();U().hc=(phase().type==="game"?1:2)+(U().up.staff>=4?1:0)+(hasPerk("c2")?1:0);U().boosterUsed=false;
+  if(S._lvl&&S._lvl.length){sum.lines.push(...S._lvl);S._lvl=[];}
+  if(S.ceremonies.length)sum.ceremony=true;
+  const ut=UT();if(["game","esp","ccg","sel"].includes(p.type))sum.lines.unshift(`${UT().school} ${ut.w}-${ut.l} (${ut.cw}-${ut.cl} ${ut.conf})${ut.apRank?" · AP #"+ut.apRank:""}${S.polls.cfpLive&&ut.cfpRank?" · CFP #"+ut.cfpRank:""}`);
+  save();
+  return sum;
+}
+function moraleAfterGame(w){S.roster.forEach(p=>p.mor=clamp(p.mor+(w?1.5:-2)+rnd(-1,1),0,100));}
+function upsetNews(gs){
+  gs.forEach(g=>{if(g.a==="FCS"){if(g.as>g.hs)addNews(`😱 FCS STUNNER: ${g.fcs} upsets ${T(g.h).school} ${g.as}-${g.hs}!`,"game");return;}
+    const h=T(g.h),a=T(g.a);const wn=g.hs>g.as?h:a,ls=g.hs>g.as?a:h;
+    if(ls.apRank&&ls.apRank<=10&&(!wn.apRank||wn.apRank>ls.apRank+8))addNews(`🚨 UPSET: ${wn.apRank?"#"+wn.apRank+" ":""}${wn.school} knocks off #${ls.apRank} ${ls.school}, ${Math.max(g.hs,g.as)}-${Math.min(g.hs,g.as)}.`,"game");
+    else if(h.apRank&&a.apRank&&h.apRank<=15&&a.apRank<=15)addNews(`🏟️ Top-15 clash: #${wn.apRank} ${wn.school} beats #${ls.apRank} ${ls.school} ${Math.max(g.hs,g.as)}-${Math.min(g.hs,g.as)}.`,"game");
+  });
+}
+function seniorStats(){
+  S.recruits.forEach(r=>{if(R()<0.12)return;const q=(r.tOvr+(r.tag==="lb"?6:0)-55)/25;const s=r.ss;s.g++;
+    const f=()=>Math.max(0,q+gauss(0,0.35));
+    switch(r.pos){
+      case "QB":s.yd=(s.yd||0)+Math.round(170+f()*130);s.td=(s.td||0)+Math.round(1+f()*2.2);s.int=(s.int||0)+(R()<0.45?1:0);break;
+      case "RB":s.yd=(s.yd||0)+Math.round(70+f()*110);s.td=(s.td||0)+Math.round(f()*2.2);break;
+      case "WR":case "TE":s.rec=(s.rec||0)+Math.round(3+f()*4);s.yd=(s.yd||0)+Math.round(40+f()*75);s.td=(s.td||0)+(R()<0.35+q*0.3?1:0);break;
+      case "OL":s.pan=(s.pan||0)+Math.round(2+f()*5);break;
+      case "DL":case "EDGE":s.tk=(s.tk||0)+Math.round(3+f()*3);s.sk=(s.sk||0)+(R()<0.25+q*0.5?1:0)+(R()<q*0.3?1:0);break;
+      case "LB":s.tk=(s.tk||0)+Math.round(5+f()*5);s.sk=(s.sk||0)+(R()<0.2?1:0);break;
+      case "CB":case "S":s.tk=(s.tk||0)+Math.round(2+f()*4);s.int=(s.int||0)+(R()<0.15+q*0.2?1:0);s.pbu=(s.pbu||0)+Math.round(f()*2);break;
+      case "K":s.fg=(s.fg||0)+Math.round(1+f()*1.5);break;
+    }});
+}
+function statLine(r){const s=r.ss;if(!s||!s.g)return "Senior season hasn't started";
+  switch(r.pos){case "QB":return `${s.yd} pass yds, ${s.td} TD, ${s.int||0} INT (${s.g} gms)`;case "RB":return `${s.yd} rush yds, ${s.td} TD (${s.g} gms)`;
+  case "WR":case "TE":return `${s.rec} rec, ${s.yd} yds, ${s.td} TD (${s.g} gms)`;case "OL":return `${s.pan} pancakes in ${s.g} starts`;
+  case "DL":case "EDGE":case "LB":return `${s.tk} tackles, ${s.sk||0} sacks (${s.g} gms)`;case "CB":case "S":return `${s.tk} tackles, ${s.int||0} INT, ${s.pbu||0} PBU (${s.g} gms)`;case "K":return `${s.fg} FG made (${s.g} gms)`;}}
+
+// ---------- CHAMPIONSHIPS & CFP ----------
+function playCCGs(sum){
+  Object.keys(CONF_GAMES).forEach(conf=>{
+    const st=standings(conf);const a=st[0],b=st[1];if(!a||!b)return;
+    const g={id:S.nextId++,wk:14,h:a,a:b,hs:0,as:0,done:false,kind:"ccg",neutral:true,label:conf+" Championship"};
+    S.games.push(g);simGame(g);const w=winner(g);T(w).champ=conf;
+    addNews(`🏆 ${T(w).school} wins the ${conf} Championship, ${Math.max(g.hs,g.as)}-${Math.min(g.hs,g.as)} over ${T(w===a?b:a).school}.`,"game");
+    if(a===U().teamId||b===U().teamId){const L=gameLine(g,U().teamId);sum.my=`${L.w?"🏆 "+conf+" CHAMPIONS!":"❌ Lost the "+conf+" title game"} ${L.ms}-${L.os} vs ${L.oname}`;if(L.w){UT().hist.push({y:S.year,conf});gainDXP(40);gainPC(6);}}
+  });
+}
+function selectCFP(sum){
+  const ranked=S.teamIds.slice().sort((a,b)=>T(b).cfp-T(a).cfp);
+  const champs=ranked.filter(id=>T(id).champ);const auto=champs.slice(0,5);
+  const field=auto.slice();for(const id of ranked){if(field.length>=12)break;if(!field.includes(id))field.push(id);}
+  field.sort((a,b)=>ranked.indexOf(a)-ranked.indexOf(b));
+  S.cfpField={seeds:field,games:[],champ:null,auto};
+  [[4,11],[5,10],[6,9],[7,8]].forEach(([x,y],i)=>S.cfpField.games.push({id:S.nextId++,h:field[x],a:field[y],hs:0,as:0,done:false,kind:"cfp",round:1,slot:i,label:`CFP First Round (#${x+1} vs #${y+1})`}));
+  addNews(`🎟️ CFP field set! First-round byes: ${field.slice(0,4).map((id,i)=>(i+1)+". "+T(id).school).join(", ")}.`,"rank");
+  const uid=U().teamId;const seed=field.indexOf(uid);
+  if(seed>=0){gainDXP(40);gainPC(10);sum.lines.push(`🎟️ ${UT().school} is IN the College Football Playoff as the #${seed+1} seed!`);addNews(`🎟️ ${UT().school} makes the CFP as the #${seed+1} seed. Recruits are watching.`,"user");U().rep=clamp(U().rep+3,0,100);
+    S.recruits.forEach(r=>{if(r.off.includes(uid))r.int[uid]=(r.int[uid]||0)+6;});UT().hist.push({y:S.year,cfp:seed+1});}
+  else sum.lines.push(`📺 ${UT().school} missed the playoff.`);
+}
+function cfpBowl(round,slot){if(round===2)return CFP_BOWLS.qf[slot];if(round===3)return CFP_BOWLS.sf[slot];if(round===4)return "National Championship";return "First Round";}
+function playCFPRound(round,sum){
+  const F=S.cfpField;if(!F)return;const uid=U().teamId;
+  if(round===2){const r1=F.games.filter(g=>g.round===1);[[0,3],[1,2],[2,1],[3,0]].forEach(([s,slot],i)=>{const w=winner(r1[slot]);F.games.push({id:S.nextId++,h:F.seeds[s],a:w,hs:0,as:0,done:false,kind:"cfp",round:2,slot:i,neutral:true,label:cfpBowl(2,i)+" (CFP Quarterfinal)"});});}
+  if(round===3){const q=F.games.filter(g=>g.round===2);[[0,3],[1,2]].forEach(([a,b],i)=>F.games.push({id:S.nextId++,h:winner(q[a]),a:winner(q[b]),hs:0,as:0,done:false,kind:"cfp",round:3,slot:i,neutral:true,label:cfpBowl(3,i)+" (CFP Semifinal)"}));}
+  if(round===4){const s=F.games.filter(g=>g.round===3);F.games.push({id:S.nextId++,h:winner(s[0]),a:winner(s[1]),hs:0,as:0,done:false,kind:"cfp",round:4,slot:0,neutral:true,label:"CFP National Championship"});}
+  F.games.filter(g=>g.round===round&&!g.done).forEach(g=>{simGame(g);
+    const w=winner(g),l=w===g.h?g.a:g.h;T(w).cfpW=(T(w).cfpW||0)+1;T(w).mom=clamp((T(w).mom||0)+1.5,-10,10);
+    S.recruits.forEach(r=>{if(!r.signed&&r.off.includes(w))r.int[w]=(r.int[w]||0)+4;});
+    if(w===uid){gainPC(3);gainDXP(20);}
+    addNews(`🏟️ ${g.label}: ${T(w).school} ${Math.max(g.hs,g.as)}, ${T(l).school} ${Math.min(g.hs,g.as)}.`,"game");
+    if(g.h===uid||g.a===uid){const L=gameLine(g,uid);sum.my=`${L.w?"✅":"❌"} ${g.label}: ${L.ms}-${L.os} vs ${L.oname}`;}
+  });
+  if(round===4){const g=F.games.find(x=>x.round===4);const w=winner(g);F.champ=w;S.champs.push({y:S.year,id:w});
+    addNews(`🏆🏆 ${T(w).school} are the ${S.year} NATIONAL CHAMPIONS!`,"game");T(w).hist.push({y:S.year,natl:true});
+    if(w===uid){gainDXP(100);gainPC(20);sum.lines.push("🏆 NATIONAL CHAMPIONS! The phones are ringing off the hook.");U().rep=clamp(U().rep+8,0,100);S.recruits.forEach(r=>{if(r.off.includes(uid))r.int[uid]=(r.int[uid]||0)+15;});}
+    T(w).elo+=60;updatePolls();
+  }
+}
+function winner(g){return g.hs>g.as?g.h:g.a;}
+function userBowl(sum){
+  const uid=U().teamId;const t=UT();if(S.cfpField.seeds.includes(uid))return;
+  if(t.w<6){sum.lines.push("🛑 No bowl this year. Rival staffs will make sure recruits hear about it.");return;}
+  const pool=S.teamIds.filter(id=>id!==uid&&T(id).w>=6&&!S.cfpField.seeds.includes(id)).sort((a,b)=>Math.abs(T(a).elo-t.elo)-Math.abs(T(b).elo-t.elo));
+  const opp=pick(pool.slice(0,6));if(!opp)return;
+  const bowl=pick(BOWLS);const g={id:S.nextId++,wk:16,h:uid,a:opp,hs:0,as:0,done:false,kind:"bowl",neutral:true,label:bowl};
+  S.games.push(g);simGame(g);const L=gameLine(g,uid);
+  sum.lines.push(`🏈 ${bowl}: ${L.w?"WIN":"LOSS"} ${L.ms}-${L.os} vs ${L.oname}.`);
+  addNews(`🏈 ${bowl}: ${t.school} ${L.w?"beats":"loses to"} ${L.oname} ${L.ms}-${L.os}.`,"user");
+}
+
+// ---------- COACHING CAROUSEL ----------
+const COACH_FN=["Mike","Tim","Chris","Jason","Brian","Matt","Kevin","Steve","Dan","Josh","Ryan","Jeff","Mark","Shane","Will","Kane","Derek","Travis","Marcus","Andre"];
+const COACH_LN=["Holloway","Brennan","Castillo","Pryor","Whitfield","Grady","Okoye","Lindqvist","Barrett","Delaney","Mercer","Sutton","Vance","Rourke","Callahan","Teague","Dorsett","Ashby","Kincaid","Merritt"];
+function fakeCoach(lo,hi){return {name:pick(COACH_FN)+" "+pick(COACH_LN),rec:rint(lo,hi),dev:rint(lo+4,hi+4),game:rint(lo+2,hi+2),hot:0,yrs:0,real:false};}
+function coachingCarousel(sum){
+  const uid=U().teamId;const openings=[];
+  S.teamIds.forEach(id=>{const t=T(id);const exp=3.5+(t.prestige-38)/60*6.5;const perf=t.w-exp;
+    t.coach.hot=clamp(t.coach.hot*0.6-perf*0.7,-5,8);t.coach.yrs++;
+    const fireP=t.coach.hot>3.2?0.35+(t.coach.hot-3.2)*0.15:0;
+    if(fireP&&R()<fireP)openings.push({id,why:"fired",old:t.coach.name});
+    else if(t.w>=12&&t.coach.game>=88&&R()<0.05)openings.push({id,why:"left for the NFL",old:t.coach.name});
+  });
+  if(!openings.length){addNews("🎠 Quiet coaching carousel this year — no major openings.","coach");return;}
+  openings.sort((a,b)=>T(b.id).prestige-T(a.id).prestige);
+  const taken=new Set(openings.map(o=>o.id));
+  openings.forEach(o=>{
+    const t=T(o.id);
+    addNews(`🎠 ${t.school} ${o.why==="fired"?"fires":"loses"} head coach ${o.old}${o.why!=="fired"?" ("+o.why+")":""}.`,"coach",o.id);
+    const cands=S.teamIds.filter(id=>!taken.has(id)&&T(id).prestige<t.prestige-8&&T(id).w>=9&&T(id).coach.rec+T(id).coach.game>=140).sort((a,b)=>(T(b).w*3+T(b).coach.game)-(T(a).w*3+T(a).coach.game));
+    let nc;
+    if(cands.length&&R()<0.75){const from=T(cands[0]);nc={...from.coach,hot:0,yrs:0};taken.add(from.id);
+      addNews(`✍️ ${t.school} hires ${nc.name} away from ${from.school}.`,"coach",o.id);
+      const old=from.coach.name;from.coach=fakeCoach(56,68);
+      addNews(`✍️ ${from.school} promotes ${from.coach.name} to replace ${old}.`,"coach",from.id);
+      if(from.id===uid){coachChangeUser(sum,old,from.coach);S.pendingJob={type:"follow",to:o.id,coach:nc.name,newCoach:from.coach.name};}
+      S.recruits.forEach(r=>{if(r.com===from.id&&!r.signed&&R()<0.3)decommit(r,"his head coach left");});
+    }else{nc=fakeCoach(64,80);addNews(`✍️ ${t.school} hires coordinator ${nc.name} as head coach.`,"coach",o.id);}
+    const oldName=t.coach.name;t.coach=nc;
+    if(o.id===uid){coachChangeUser(sum,oldName,nc);
+      if(o.why==="fired"){const keepP=clamp(0.3+U().rep/200+(U().sec-50)/120,0.1,0.9);S.pendingJob={type:"fired",old:oldName,coach:nc.name,kept:R()<keepP};}
+      else S.pendingJob={type:"nfl",old:oldName,coach:nc.name};}
+    S.recruits.forEach(r=>{if(r.com===o.id&&!r.signed&&R()<0.3)decommit(r,"coaching change");});
+  });
+}
+function coachChangeUser(sum,oldName,nc){sum.lines.push(`🎠 Coaching change: ${oldName} is out. New head coach ${nc.name} (REC ${nc.rec} / DEV ${nc.dev} / GAME ${nc.game}). Your commits are wobbling.`);U().sec=clamp(U().sec-8,0,100);}
+
+// ---------- OFFICIAL VISITS ----------
+function ovSlots(){
+  const p=phase();const out=[];const uid=U().teamId;
+  if(p.type==="game"||p.type==="pre"){S.games.filter(g=>g.kind==="reg"&&g.h===uid&&!g.done&&g.wk>=(p.week||0)).forEach(g=>out.push({key:"w"+g.wk,label:`Week ${g.wk} vs ${g.a==="FCS"?g.fcs:T(g.a).school}`,game:g}));}
+  const nsdIdx=S.cal.findIndex(c=>c.key==="nsd");
+  if(S.phaseIdx>nsdIdx){["ov1","ov2"].forEach(k=>{const idx=S.cal.findIndex(c=>c.key===k);if(idx>=S.phaseIdx)out.push({key:k,label:S.cal[idx].label+" ("+S.cal[idx].date+")"});});}
+  return out;
+}
+function ovBooked(key){return S.recruits.filter(r=>r.ov.includes(key)).length;}
+function resolveOVs(p){
+  const uid=U().teamId;const key=p.key;
+  const vis=S.recruits.filter(r=>r.ov.includes(key));if(!vis.length)return;
+  const g=p.type==="game"?userGame(p.week):null;
+  let gameF=1,desc="";
+  if(g){simGame(g);const L=gameLine(g,uid);const oppT=L.opp!=="FCS"?T(L.opp):null;
+    gameF=L.w?(oppT&&oppT.apRank?1.5:1.15):(L.os-L.ms>17?0.45:0.75);
+    if(oppT&&isRival(uid,oppT.id))gameF*=L.w?1.3:0.85;
+    desc=L.w?`a ${L.ms}-${L.os} win`:`a ${L.ms}-${L.os} loss`;}
+  vis.forEach(r=>{
+    r.ov=r.ov.filter(v=>v!==key);r.ovDone.push(uid);
+    const vibe=gauss(1,0.18);const gain=26*(0.5+attract(UT(),r))*gameF*vibe*skM("rel")*(hasPerk("x2")?1.2:1)*pipeMult(r);gainXP("rel",3);growPipe(r,3,1);
+    const ox=revealTrait(r,"any",0.6);if(ox)r.log.unshift(`${p.label}: 🔍 Over the weekend you learned he's ${TRAITS[ox.k].i} ${TRAITS[ox.k].n}.`);
+    r.int[uid]=(r.int[uid]||0)+gain;r.lastTouch=S.tick;if(r.com===uid)r.hard=true;
+    const mood=gain>40?"🔥 He LOVED it":gain>25?"👍 Strong visit":gain>14?"😐 Fine visit":"🥶 Flat visit";
+    r.log.unshift(`${p.label}: Official visit${g?" ("+desc+")":""} — ${mood} (+${Math.round(gain)})`);
+    S.summary.lines.push(`🏟️ OV: ${rName(r)} — ${mood}${g?" after "+desc:""}.`);
+  });
+}
+function aiOVs(){
+  S.recruits.forEach(r=>{if(r.signed||r.stars<3)return;const top=r.off.filter(id=>id!==U().teamId).sort((a,b)=>(r.int[b]||0)-(r.int[a]||0)).slice(0,2);
+    top.forEach(id=>{if(R()<0.5&&r.ovDone.length<5&&!r.ovDone.includes(id)){r.int[id]+=18*(0.5+attract(T(id),r));r.ovDone.push(id);}});});
+}
+
+// ---------- USER ACTIONS ----------
+const ACT={
+  film:{h:2,label:"Watch Film",desc:"Scouting +18"},
+  eval:{h:5,label:"In-Person Eval",desc:"Scouting +40"},
+  call:{h:1,label:"Phone Call",desc:"Interest +, learn motives"},
+  pitch:{h:2,label:"Pitch",desc:"Sell one motivation"},
+  visit:{h:5,label:"Assistant Visit",desc:"Interest ++"},
+  hc:{h:0,label:"Head Coach Visit",desc:"Uses HC slot"},
+};
+function hoursPerWeek(){return U().hoursMax+(U().up.staff-1)*6+(U().sk.net-1)+(U().ad?U().ad.staff:0)+(hasPerk("n1")?4:0);}
+function sk(k){return (U().sk&&U().sk[k])||1;}
+function skM(k,per){return 1+(sk(k)-1)*(per||0.05);}
+function gainXP(k,n,sum){const u=U();u.xp[k]=(u.xp[k]||0)+n;let need=xpNeed(u.sk[k]);
+  while(u.sk[k]<10&&u.xp[k]>=need){u.xp[k]-=need;u.sk[k]++;need=xpNeed(u.sk[k]);const nm=SKILLS.find(s=>s[0]===k)[1];
+    const msg=`🆙 Director skill up: ${nm} is now Lv ${u.sk[k]}.`;addNews(msg,"user");(S._lvl=S._lvl||[]).push(msg);}}
+function xpNeed(l){return Math.round(25+l*l*9);}
+function canSpend(h){return U().hours>=h;}
+function spend(h){U().hours-=h;}
+function scoutMult(){return (1+0.18*(U().up.scout-1))*skM("eval",0.06);}
+function act(r,type,arg){
+  const uid=U().teamId;const t=UT();const a=ACT[type];
+  const cost=actCost(type);
+  if(a&&!canSpend(cost))return {ok:false,msg:"Not enough hours this week."};
+  if(r.signed&&r.com!==uid)return {ok:false,msg:"He has already signed elsewhere."};
+  const atr=attract(t,r);let msg="";
+  if(r.tkT!==S.tick){r.tkT=S.tick;r.tkN=0;}
+  const fat=["call","pitch","visit","hc","eval"].includes(type)?[1,0.75,0.5,0.35,0.25][Math.min(4,r.tkN)]:1;
+  const isPortal=!!r.portal;
+  const pre=(r.off.includes(uid)?1:0.6)*fat*(isPortal?(hasPerk("n3")?1.3:1):pipeMult(r))*(r.com&&r.com!==uid&&hasPerk("c3")?1.35:1)*(["call","pitch"].includes(type)&&hasPerk("c1")?1.15:1);
+  const hsB=isPortal?1:1+pipeHS(r)/200;
+  const reveal=(p)=>{if(R()<p){const unknown=MOTIVES.map((m,i)=>i).filter(i=>!(r.known&(1<<i)));if(unknown.length){const i=wpick(unknown,x=>r.mot[x]+0.05);r.known|=(1<<i);return ` Learned: "${MOTIVES[i][1]}" is ${motLevel(r.mot[i])} to him.`;}}return "";};
+  switch(type){
+    case "film":{spend(cost);const g=Math.round(18*scoutMult()*hsB);r.sc=Math.min(100,r.sc+g);msg=`Film study complete (+${g} scouting).`;gainXP("eval",2);
+      const x=revealTrait(r,"film",0.18+r.sc/250);if(x)msg+=` 🔍 The tape shows a trait: ${TRAITS[x.k].i} ${TRAITS[x.k].n}.`;break;}
+    case "eval":{spend(a.h);growPipe(r,1.5,0.3);const g=Math.round(40*scoutMult()*hsB);r.sc=Math.min(100,r.sc+g);r.int[uid]=(r.int[uid]||0)+3*pre;msg=`In-person evaluation done (+${g} scouting). He noticed you in the stands.`;gainXP("eval",5);
+      const x=revealTrait(r,R()<0.6?"eval":"film",0.55);if(x)msg+=` 🔍 Seen in person: ${TRAITS[x.k].i} ${TRAITS[x.k].n}.`;break;}
+    case "call":{spend(a.h);r.gpaK=true;const g=(4.5+rnd(0,2.5))*(0.6+atr)*pre*skM("pers");r.int[uid]=(r.int[uid]||0)+g;msg=`Good call (+${g.toFixed(1)}).`+reveal(0.42+sk("pers")*0.03);gainXP("pers",1);
+      const x=revealTrait(r,"talk",0.12);if(x)msg+=` 🔍 You get a read on him: ${TRAITS[x.k].i} ${TRAITS[x.k].n}.`;break;}
+    case "pitch":{spend(a.h);const i=MOTIVE_IDX[arg];const w=r.mot[i];const g0=grade(t,r,arg);
+      const recent=r.lastPitch[arg]!==undefined&&S.tick-r.lastPitch[arg]<3?0.45:1;
+      const g=46*w*Math.pow(Math.min(g0,120)/100,1.5)*recent*pre*rnd(0.85,1.15)*skM("pers");gainXP("pers",2);r.int[uid]=(r.int[uid]||0)+g;r.lastPitch[arg]=S.tick;
+      r.known|=(1<<i);
+      const react=w>=0.2&&g0>=70?"🔥 That landed. He lit up.":w>=0.2&&g0<55?"😬 He cares about it, but isn't buying your case.":w<0.1?"🥱 He doesn't care much about that.":g0>=70?"👍 Solid pitch.":"😐 Lukewarm.";
+      msg=`${MOTIVES[i][1]} pitch: ${react} (+${g.toFixed(1)})`+(recent<1?" — you just pitched this; diminishing returns.":"");break;}
+    case "visit":{spend(a.h);r.gpaK=true;growPipe(r,1,0.3);const g=13*(0.6+atr)*pre*rnd(0.8,1.2)*skM("rel");r.int[uid]=(r.int[uid]||0)+g;msg=`Assistant visit went well (+${g.toFixed(1)}).`+reveal(0.62+sk("pers")*0.03);gainXP("rel",3);
+      const x=revealTrait(r,R()<0.7?"talk":"eval",0.4);if(x)msg+=` 🔍 Time with the family reveals: ${TRAITS[x.k].i} ${TRAITS[x.k].n}.`;break;}
+    case "hc":{if(U().hc<=0)return {ok:false,msg:"No head-coach visits left this week."};U().hc--;
+      const cw=r.mot[MOTIVE_IDX.coach];const g=(12+cw*45)*(t.coach.rec/75)*pre*rnd(0.85,1.2)*skM("rel");r.int[uid]=(r.int[uid]||0)+g;gainXP("rel",2);
+      const hx=revealTrait(r,"talk",0.3);
+      msg=(hx?`🔍 Coach came away knowing he's ${TRAITS[hx.k].i} ${TRAITS[hx.k].n}. `:"")+`${t.coach.name} sat in the living room (+${g.toFixed(1)}).`+(cw>0.2?" The coach relationship matters a ton to this kid.":"");break;}
+    case "offer":{if(r.off.includes(uid))return {ok:false,msg:"Already offered."};
+      const lim=isPortal?40:offerLimit();const used=isPortal?S.portal.filter(x=>x.off.includes(uid)).length:S.recruits.filter(x=>x.off.includes(uid)&&!x.signed&&(!x.com||x.com===uid)).length;
+      if(used>=lim)return {ok:false,msg:`Offer limit reached (${lim}).`};
+      r.off.push(uid);const g=6*(0.6+atr);r.int[uid]=(r.int[uid]||0)+g;
+      const ai=!isPortal?admitIssue(r,uid):null;if(ai&&(r.sc>=20||hasPerk("e2")))msg+=`⚠️ Admissions flag: ${ai}. `;
+      msg+=r.stars>=4&&R()<0.5?`"Blessed to receive an offer from ${t.school}!" 🙏 (+${g.toFixed(1)})`:`Offer extended (+${g.toFixed(1)}).`;
+      if(!isPortal&&r.rank<=300)addNews(`📨 ${t.school} offers ${r.stars}★ ${r.pos} ${rName(r)} (#${r.rank}).`,"user");break;}
+    case "nil":{const amt=Math.max(0,Math.round(arg));const old=r.nilO||0;
+      const avail=budgetLeft()+(r.com===uid?old:0);
+      if(amt>old&&amt>avail)return {ok:false,msg:`Not enough budget. ${money(Math.max(0,avail))} available.`};
+      if(amt<old&&r.com===uid){r.int[uid]*=0.85;}
+      r.nilO=amt;const mk=Math.max(5,r.nil)/(hasPerk("x1")?1.1:1);const ratio=Math.min(amt/mk,1.6),oratio=Math.min(old/mk,1.6);const w=r.mot[MOTIVE_IDX.nil];
+      let g=amt>old?(ratio-oratio)*40*(0.3+w*2.5)*skM("neg",0.06):0;if(amt>old)gainXP("neg",2);
+      if(amt/mk>1.75+sk("neg")*0.05&&R()<0.4-sk("neg")*0.02){g*=0.4;r.int[uid]=(r.int[uid]||0)+g;msg=`🚩 NIL Go flagged the deal (${money(amt)}) as above market value — his camp is spooked. Interest gain cut (+${g.toFixed(1)}).`;break;}
+      r.int[uid]=(r.int[uid]||0)+g;
+      msg=amt===0?"NIL offer withdrawn.":`NIL package ${money(amt)}/yr on the table (+${g.toFixed(1)}). His market value is ~${money(r.nil)}.`;break;}
+  }
+  if(r.int[uid]&&!r.off.includes(uid))r.int[uid]=Math.min(r.int[uid],40);
+  if(type!=="film"&&type!=="eval")r.lastTouch=S.tick;
+  if(fat<1)msg+=` (He's heard from you a lot this week — diminishing returns.)`;
+  if(["call","pitch","visit","hc","eval"].includes(type))r.tkN++;
+  if(msg)r.log.unshift(`${phase().label}: ${msg}`);if(r.log.length>14)r.log.length=14;
+  if(!isPortal&&!S.user.targets[r.id]&&type!=="film"&&targetCount()<targetCap())S.user.targets[r.id]=1;
+  return {ok:true,msg};
+}
+function targetCap(){return 25+U().up.staff*5;}
+function targetCount(){let n=0;const ids=S.user.targets;S.recruits.forEach(r=>{if(ids[r.id]&&!r.signed)n++;});return n;}
+function toggleTarget(r){if(S.user.targets[r.id]){delete S.user.targets[r.id];return {ok:true,on:false};}if(targetCount()>=targetCap())return {ok:false,msg:`Priority board full (${targetCap()}). Remove someone first.`};S.user.targets[r.id]=1;return {ok:true,on:true};}
+function offerLimit(){return 110+U().up.staff*10;}
+function motLevel(w){return w>=0.24?"a top priority":w>=0.13?"important":w>=0.08?"somewhat important":"not a big deal";}
+function scheduleOV(r,key){
+  const uid=U().teamId;
+  if(!r.off.includes(uid))return {ok:false,msg:"Offer him first."};
+  if(r.ovDone.includes(uid)||r.ov.length)return {ok:false,msg:"Already visited or scheduled."};
+  if(r.ovDone.length>=5)return {ok:false,msg:"He has used all 5 official visits."};
+  if(ovBooked(key)>=ovCap(key))return {ok:false,msg:"That weekend is full."};
+  if(!canSpend(3))return {ok:false,msg:"Need 3 hours to plan the visit."};
+  spend(3);r.ov.push(key);r.lastTouch=S.tick;
+  r.log.unshift(`${phase().label}: Official visit scheduled (${key.startsWith("w")?"Week "+key.slice(1):S.cal.find(c=>c.key===key).label}).`);
+  return {ok:true,msg:"Official visit booked!"};
+}
+function ovCap(key){const x=(U().ad?U().ad.ov:0)+(hasPerk("x2")?4:0);return (key.startsWith("ov")?12+U().up.staff*2:6+U().up.staff)+x;}
+function boosterEvent(){
+  if(U().boosterUsed)return {ok:false,msg:"Already held a booster event this week."};
+  if(!canSpend(6))return {ok:false,msg:"Need 6 hours."};
+  spend(6);U().boosterUsed=true;const t=UT();
+  const raised=Math.round((80+t.prestige*3+Math.max(0,t.streak)*40+Math.max(0,t.mom)*25+(t.apRank?(26-t.apRank)*12:0))*rnd(0.6,1.4)*(1+0.2*(U().up.collective-1))*skM("net",0.08)*(hasPerk("n4")?1.5:1)/5)*5;gainXP("net",4);
+  U().bonusNIL+=raised;addNews(`💰 Booster dinner raises ${money(raised)} for the ${t.school} collective.`,"user");
+  return {ok:true,msg:`Booster event raised ${money(raised)} for the collective!`};
+}
+
+// ---------- CREW CRYSTAL BALL ----------
+function topSchools(r,n){const tot=r.off.reduce((a,id)=>a+(r.int[id]||0),0)||1;return r.off.map(id=>({id,p:(r.int[id]||0)/tot,pts:r.int[id]||0})).sort((a,b)=>b.pts-a.pts).slice(0,n||5);}
+function crystalBall(r){if(r.com)return null;const ts=topSchools(r,3);if(!ts.length||ts[0].pts<commitThreshold(r)*0.45)return null;
+  const conf=clamp(Math.round(ts[0].p*100*1.25+(ts[0].pts/commitThreshold(r))*12),30,95);return {id:ts[0].id,conf};}
+function userStanding(r){const uid=U().teamId;const ts=topSchools(r,20);const i=ts.findIndex(x=>x.id===uid);if(i<0)return {i:-1,label:r.off.includes(uid)?"—":"No offer",p:0};
+  const p=ts[i].p;return {i,p,label:i===0?"Leader":i<3?"Top 3":i<5?"In the mix":"Long shot"};}
+
+// ---------- SCOUTING DISPLAY ----------
+const LETTERS=[[93,"A+"],[89,"A"],[85,"A-"],[81,"B+"],[77,"B"],[73,"B-"],[69,"C+"],[65,"C"],[61,"C-"],[0,"D"]];
+function letter(v){for(const [t,l] of LETTERS)if(v>=t)return l;return "D";}
+function letterShift(l,d){const i=LETTERS.findIndex(x=>x[1]===l);return LETTERS[clamp(i-d,0,LETTERS.length-1)][1];}
+function scoutView(r){
+  const sc=r.sc;const lvl=U().up.scout;const out={};
+  if(r.portal){out.ovr=sc>=40||hasPerk("n3")?String(r.tOvr):`${r.tOvr-3}–${r.tOvr+3}`;}
+  else if(sc<15)out.ovr="?";else{const w=Math.round(Math.max(0,13-sc/8));out.ovr=w<=0?String(r.tOvr):`${r.tOvr-w+Math.round(r.mis*w/3)}–${r.tOvr+w+Math.round(r.mis*w/3)}`;}
+  const L=letter(r.tPot);const err=(lvl<3&&sk("eval")<6&&sc<90&&!hasPerk("e4"))?r.mis:0;
+  if(sc<30&&!r.portal)out.pot="?";else if(sc<(hasPerk("e4")?40:65)){const c=letterShift(L,err);out.pot=letterShift(c,1)+" to "+letterShift(c,-1);}else out.pot=letterShift(L,err);
+  const tl=v=>v>=75?"High":v>=45?"Average":"Low";
+  out.we=sc>=55?(sc>=90?r.we:tl(r.we)):"?";out.chr=sc>=55?(sc>=90?r.chr:tl(r.chr)):"?";
+  const gap=r.tPot-(r.perc+1);
+  const gt=hasPerk("e2")?30:50;out.gem=sc>=gt&&gap>=6&&!r.portal; out.bust=sc>=gt&&gap<=-5&&!r.portal;
+  if(err&&out.gem&&r.mis<0)out.gem=false;
+  out.chrFlag=sc>=55&&r.chr<35;
+  return out;
+}
+
+// ---------- CLASS RANKINGS ----------
+function classRankings(){
+  const by={};S.recruits.forEach(r=>{if(r.com){(by[r.com]=by[r.com]||[]).push(r);}});
+  return S.teamIds.map(id=>{const list=(by[id]||[]).sort((a,b)=>b.comp-a.comp);let pts=0;list.forEach((r,i)=>pts+=Math.max(0,(r.comp-0.70))*100*Math.pow(0.9,i)*(r.comp>0.98?1.25:1));
+    return {id,pts:Math.round(pts*10)/10,n:list.length,s5:list.filter(r=>r.stars===5).length,s4:list.filter(r=>r.stars===4).length,s3:list.filter(r=>r.stars===3).length,avg:list.length?list.reduce((a,r)=>a+r.comp,0)/list.length:0};}).sort((a,b)=>b.pts-a.pts);
+}
+
+// ---------- TRANSFER PORTAL ----------
+function openPortal(sum){
+  S.portalOpen=true;const uid=U().teamId;
+  // roster departures happen here
+  rosterDepartures(sum);
+  S.portal=[];
+  const N=420;
+  for(let i=0;i<N;i++){
+    const from=wpick(S.teamIds.filter(id=>id!==uid),id=>1.4-T(id).prestige/100);
+    const ft=T(from);const pos=wpick(POSITIONS,p=>POS_SHARE[p]);
+    const ovr=clamp(Math.round(gauss(ft.talent-6,7)+(R()<0.08?rnd(5,12):0)),50,92);
+    const p=genRecruit(S.year);
+    Object.assign(p,{portal:true,from,pos,tOvr:ovr,tPot:clamp(ovr+rint(0,9),ovr,99),yrs:rint(1,3),st:ft.st,lat:ft.lat,lon:ft.lon,city:ft.school,sc:0,int:{},off:[]});
+    const sz=POS_SIZE[pos];p.ht=Math.round(sz[0]+gauss(0,1.4));p.wt=Math.round(sz[1]*1.04+gauss(0,sz[1]*0.05));p.forty=+(POS_FORTY[pos]+gauss(0,0.05)).toFixed(2);
+    p.stars=ovr>=84?5:ovr>=77?4:ovr>=68?3:2;
+    p.nil=Math.round((ovr>=86?rnd(900,2200):ovr>=80?rnd(350,900):ovr>=74?rnd(120,380):ovr>=67?rnd(40,140):rnd(10,45))*(pos==="QB"?2.1:1)/5)*5;
+    S.portal.push(p);
+  }
+  // user's departures enter the pool
+  (S._userPortal||[]).forEach(pl=>{const p=genRecruit(S.year);Object.assign(p,{portal:true,from:uid,fn:pl.fn,ln:pl.ln,pos:pl.pos,tOvr:pl.ovr,tPot:pl.pot,yrs:Math.max(1,4-pl.yr),stars:pl.ovr>=84?5:pl.ovr>=77?4:pl.ovr>=68?3:2,nil:Math.max(20,Math.round(pl.nil*1.3)),sc:100,int:{},off:[]});S.portal.push(p);});
+  S._userPortal=[];
+  S.portal.sort((a,b)=>b.tOvr-a.tOvr);S.portal.forEach((p,i)=>{p.rank=i+1;});
+  // AI interest
+  S.portal.forEach(p=>{const L=p.tOvr+10;const cands=S.teamIds.filter(id=>id!==uid&&id!==p.from&&Math.abs(T(id).talent-L+8)<14);
+    shuffle(cands).slice(0,rint(3,7)).forEach(id=>{p.off.push(id);p.int[id]=rnd(5,20)*attract(T(id),p);});});
+  addNews(`🌀 The transfer portal is OPEN. ${S.portal.length} notable players entered.`,"portal");
+  sum.lines.push(`🌀 Transfer portal open: ${S.portal.length} players. Use the Portal tab — they commit fast.`);
+}
+function portalTick(final,sum){
+  const uid=U().teamId;const dm=DIFF_MULT[U().diff]||1;const evts=[];
+  S.portal.forEach(p=>{if(p.com)return;
+    p.off.forEach(id=>{if(id===uid)return;const t=T(id);p.int[id]=(p.int[id]||0)+12*attract(t,p)*rnd(0.5,1.5)*dm*(t.nil/6);});
+    const ranked=p.off.map(id=>[id,p.int[id]||0]).sort((a,b)=>b[1]-a[1]);if(!ranked.length)return;
+    const [top,tp]=ranked[0];const sp=ranked[1]?ranked[1][1]:0;
+    if((final&&tp>8)||(tp>=45&&tp>=sp*1.1&&R()<0.45)){p.com=top;p.signed=true;
+      if(top===uid){gainDXP(8);addNews(`🌀 PORTAL COMMIT: ${p.tOvr} OVR ${p.pos} ${rName(p)} (from ${T(p.from).school}) picks ${UT().school}!`,"user");sum.lines.push(`🌀 Portal pickup: ${p.pos} ${rName(p)} (${p.tOvr} OVR) from ${T(p.from).school}.`);}
+      else if(p.rank<=40)addNews(`🌀 Top portal ${p.pos} ${rName(p)} (${p.tOvr} OVR, ex-${T(p.from).school}) commits to ${T(top).school}.`,"portal",top);
+    }});
+  if(final){
+    (S.retention||[]).slice().forEach(x=>resolveRetention(x.pid,false));
+    // move signed portal players to roster
+    S.portal.filter(p=>p.com===uid).forEach(p=>{S.roster.push({id:S.nextId++,fn:p.fn,ln:p.ln,pos:p.pos,yr:clamp(5-p.yrs,1,4),ovr:p.tOvr,ovr0:p.tOvr,pot:p.tPot,we:p.we,chr:p.chr,nil:p.nilO||0,mor:75,from:"Portal",stars:p.stars,rs:false,tr:(p.tr||[]).map(x=>({...x})),hist:[],pfrom:p.from,cls:S.year+1,portalIn:true});});
+    // AI talent bumps from portal
+    const gain={};S.portal.forEach(p=>{if(p.com&&p.com!==uid)gain[p.com]=(gain[p.com]||0)+(p.tOvr-T(p.com).talent+6)*0.05;});
+    Object.keys(gain).forEach(id=>T(id).talent=clamp(T(id).talent+clamp(gain[id],-1.5,3),45,96));
+    S.portalHist=S.portal.filter(p=>p.com===uid).map(p=>({n:rName(p),pos:p.pos,ovr:p.tOvr,from:p.from}));S.portal=[];S.portalOpen=false;invalidateProj();
+    sum.lines.push(`🌀 Portal window closed. Roster: ${S.roster.length}/105.`);
+  }
+}
+function rosterDepartures(sum){
+  const uid=U().teamId;const out=[];const draft=[];const port=[];
+  S.roster.forEach(p=>{
+    if(p.yr>=5||(p.yr===4&&(!p.rs||R()<0.55))){out.push(p);if(p.ovr>=77)draft.push(p);return;}
+    if(p.yr===3&&p.ovr>=84&&R()<0.7){out.push(p);draft.push(p);return;}
+    if(p.yr===4)p.rs=false;
+    // portal risk: buried good players & unhappy players
+    const d=depth(p.pos);const slot=d.indexOf(p);const starter=slot<POS_STARTERS[p.pos];
+    let risk=(starter?0.02:0.1)+(p.mor<45?0.25:0)+(p.ovr>=72&&!starter?0.12:0);
+    (p.tr||[]).forEach(x=>{const tt=TRAITS[x.k];if(tt.port)risk+=x.k==="home"?(p.hlat&&miles(p.hlat,p.hlon,UT().lat,UT().lon)>600?tt.port:0):tt.port;if(x.k==="diva"&&starter)risk-=0.1;});
+    risk=Math.max(0.01,risk)*(hasPerk("x4")?0.7:1);
+    if(R()<risk)port.push(p);
+  });
+  S.roster=S.roster.filter(p=>!out.includes(p));
+  S.draftPool=draft.map(p=>({n:p.fn+" "+p.ln,pos:p.pos,ovr:p.ovr,stars:p.stars,ovr0:p.ovr0,hsRank:p.hsRank,mine:!!p.cls,yr:p.yr}));
+  S.alumni=(S.alumni||[]).concat(out.filter(p=>p.cls).map(p=>({n:p.fn+" "+p.ln,pos:p.pos,stars:p.stars,ovr0:p.ovr0,ovr:p.ovr,cls:p.cls,team:UT().id}))).slice(-80);
+  S.retention=port.map(p=>({pid:p.id,ask:Math.round(Math.max(40,p.nil*1.4+(p.ovr-60)*12)*(1-0.03*(sk("neg")-1))*(hasPerk("x4")?0.75:1)/5)*5}));
+  S.roster.forEach(p=>p.yr++);
+  const pr=draft.filter(p=>p.ovr>=85).length;
+  sum.lines.push(`🎓 ${out.length} players exhausted eligibility or declared for the NFL Draft (${draft.length} draft prospects${pr?", "+pr+" projected Day 1-2":""}).`);
+  if(draft.length)addNews(`🏈 ${draft.length} ${UT().school} players head to the NFL Draft — a pitch for your "NFL Development" sell.`,"user");
+  if(port.length)sum.lines.push(`⚠️ ${port.length} players are considering the portal. Handle it on the Team tab before the window closes.`);
+  invalidateProj();
+}
+function resolveRetention(pid,keep){
+  const i=S.retention.findIndex(x=>x.pid===pid);if(i<0)return;const rr=S.retention[i];const p=S.roster.find(x=>x.id===pid);S.retention.splice(i,1);if(!p)return;
+  if(keep){if(budgetLeft()<rr.ask-p.nil)return {ok:false,msg:"Not enough budget."};p.nil=rr.ask;p.mor=80;addNews(`🤝 ${p.pos} ${p.fn} ${p.ln} signs a retention deal and stays.`,"user");}
+  else{S.roster=S.roster.filter(x=>x!==p);(S._userPortal=S._userPortal||[]).push(p);
+    if(S.portalOpen){const q=genRecruit(S.year);Object.assign(q,{portal:true,from:U().teamId,fn:p.fn,ln:p.ln,pos:p.pos,tOvr:p.ovr,tPot:p.pot,yrs:Math.max(1,5-p.yr),stars:p.ovr>=84?5:p.ovr>=77?4:p.ovr>=68?3:2,nil:Math.max(20,Math.round(p.nil*1.3)),sc:100,int:{},off:[]});
+      const cands=S.teamIds.filter(id=>id!==U().teamId);shuffle(cands).slice(0,4).forEach(id=>{q.off.push(id);q.int[id]=rnd(10,25);});S.portal.push(q);S._userPortal=[];}
+    addNews(`🚪 ${p.pos} ${p.fn} ${p.ln} enters the transfer portal.`,"user");}
+  invalidateProj();return {ok:true};
+}
+
+// ---------- SIGNING DAY / CLASS CLOSE ----------
+function closeClass(sum){
+  const uid=U().teamId;const cr=classRankings();const rk=cr.findIndex(x=>x.id===uid)+1;const mine=S.recruits.filter(r=>r.com===uid);
+  S.classHist[S.classYear]=cr.slice(0,25).map(x=>({id:x.id,pts:x.pts,n:x.n,s5:x.s5,s4:x.s4}));
+  addNews(`📜 National Signing Day: the Class of ${S.classYear} is complete. #1 class: ${T(cr[0].id).school} (${cr[0].pts} pts).`,"rank");
+  sum.lines.push(`📜 Class of ${S.classYear} final: ${UT().school} ranks #${rk} (${mine.length} signees, ${mine.filter(r=>r.stars===5).length}× 5★, ${mine.filter(r=>r.stars===4).length}× 4★).`);
+  // add to roster as freshmen
+  mine.forEach(r=>{const o=r.tOvr+rint(3,8);S.roster.push({id:S.nextId++,fn:r.fn,ln:r.ln,pos:r.pos,yr:1,ovr:o,ovr0:o,pot:r.tPot,we:r.we,chr:r.chr,nil:r.nilO||0,mor:85,from:"HS",stars:r.stars,rs:true,cls:S.classYear,hsRank:r.rank,gem:r.tag,tr:(r.tr||[]).map(x=>({...x})),hist:[],st:r.st,hlat:r.lat,hlon:r.lon});});
+  gainXP("eval",4+mine.filter(r=>r.stars>=4).length);gainXP("pers",4);gainXP("rel",4);
+  decayPipes();mine.forEach(r=>growPipe(r,14,4));
+  const gemN=mine.filter(r=>r.tag==="lb"&&r.stars<=3).length;if(gemN){gainDXP(gemN*15);sum.lines.push(`💎 You signed ${gemN} under-the-radar gem${gemN>1?"s":""} the services missed.`);}
+  if(U().ad){U().ad.waiv=0;U().ad.waivUsed=0;}
+  // preferred walk-ons fill thin position groups
+  POSITIONS.forEach(pos=>{const have=S.roster.filter(p=>p.pos===pos).length;for(let i=have;i<POS_ROSTER_TARGET[pos];i++){const p=genPlayer(pos,1,50);p.ovr=rint(44,56);p.pot=p.ovr+rint(4,16);p.stars=2;p.from="Walk-on";S.roster.push(p);}});
+  // AI talent update from class
+  cr.forEach((c,i)=>{if(c.id===uid)return;const t=T(c.id);const classQ=60+clamp(c.pts,0,320)/320*34;
+    t.talent=clamp(t.talent*0.72+classQ*0.2+(t.coach.dev-75)*0.08+(t.prestige*0.3+60)*0.08+gauss(0,1.8)-1.0,45,96);});
+  // director evaluation
+  const gs=goalStatus();const met=gs.filter(g=>g.ok).length;
+  gainDXP(met*20+(rk<=10?60:rk<=25?35:rk<=50?15:0));gainPC(met*6);
+  const dRep=(met-2)*3+(rk<=10?3:0);U().rep=clamp(U().rep+dRep,0,100);U().sec=clamp(U().sec+(met-2)*12,0,100);U().upPts+=met>=3?2:met>=2?1:0;
+  U().career.push({y:S.classYear,team:uid,rank:rk,n:mine.length,s5:mine.filter(r=>r.stars===5).length,s4:mine.filter(r=>r.stars===4).length,met,rec:UT().w+"-"+UT().l});
+  sum.lines.push(`🧑‍💼 AD review: ${met}/4 goals met. Reputation ${dRep>=0?"+":""}${dRep} → ${Math.round(U().rep)}. Job security ${Math.round(U().sec)}.`);
+  sum.review={met,gs,rk};
+  if(U().sec<=10){sum.fired=true;}
+  // job offers
+  sum.offers=jobOffers();
+  // retrospective: gems you passed on
+  const gems=S.recruits.filter(r=>r.tag==="lb"&&r.stars<=3&&r.sc>=50&&r.com!==uid).slice(0,2);
+  gems.forEach(g=>addNews(`📼 The tape was there: your staff graded ${rName(g)} highly, but he signed with ${g.com?T(g.com).school:"nobody"} as a ${g.stars}★.`,"user"));
+  // generate next class
+  S.prevClass=mine.map(r=>({id:r.id,n:rName(r),pos:r.pos,stars:r.stars,rank:r.rank}));
+  genClass(S.classYear+1);S.user.targets={};
+  sum.lines.push(`🆕 The Class of ${S.classYear} board is live: ${S.recruits.length} prospects. Junior Days are next.`);
+}
+function jobOffers(){
+  const uid=U().teamId;const rep=U().rep;const cur=UT().prestige;if(rep<50)return [];
+  const c=S.teamIds.filter(id=>id!==uid&&T(id).prestige>cur&&T(id).prestige<=rep+25).sort(()=>R()-0.5).slice(0,rep>75?3:rep>62?2:1);
+  return R()<0.75?c:[];
+}
+function takeJob(id){
+  U().teamId=id;U().sec=70;U().yearsAt=0;U().bonusNIL=0;U().targets={};S.pendingJob=null;initAD();
+  S.recruits.forEach(r=>{r.nilO=0;r.ov=[];});S.portal.forEach(r=>{r.nilO=0;});S.retention=[];
+  genRoster();invalidateProj();
+  addNews(`🧳 You've been hired as Director of Recruiting at ${T(id).school}!`,"user");
+}
+function springProgression(sum){
+  const dev=UT().coach.dev;let gains=0,big=[];
+  S.roster.forEach(p=>{const stage=p.yr<=2?"early":"late";let g=Math.max(0,(p.pot-p.ovr))*(0.17+dev/450+p.we/500)*rnd(0.6,1.3)*traitMult(p,stage)+rnd(0,1.5);
+    if(hasT(p,"raw")&&p.yr>=3&&R()<0.4){p.pot=Math.min(99,p.pot+rint(2,5));}
+    if(hasT(p,"inj")&&R()<0.3)g*=0.4;
+    const before=p.ovr;p.ovr=clamp(Math.round(p.ovr+g),40,99);p.pot=Math.max(p.pot,p.ovr);gains+=p.ovr-before;if(p.ovr-before>=7)big.push(p);
+    (p.hist=p.hist||[]).push({y:S.year,o:p.ovr});
+    revealTrait(p,"any",0.45,null);
+  });
+  UT().talent=teamOVR(S.roster);
+  sum.lines.push(`💪 Spring development: roster gained ${Math.round(gains)} total OVR. Team OVR now ${UT().talent}.`);
+  big.sort((a,b)=>(b.ovr-(b.hist.length>1?b.hist[b.hist.length-2].o:b.ovr0||b.ovr))-(a.ovr-(a.hist.length>1?a.hist[a.hist.length-2].o:a.ovr0||a.ovr)));
+  big.slice(0,4).forEach(p=>sum.lines.push(`📈 Breakout: ${p.pos} ${p.fn} ${p.ln} jumped to ${p.ovr} OVR${p.stars&&p.stars<=3&&p.ovr>=80?` — not bad for a ${p.stars}★`:""}${p.gem==="lb"?" (the hidden gem is real)":""}.`));
+  const rev=S.roster.reduce((a,p)=>a+(p.tr||[]).filter(x=>x.rev).length,0);sum.lines.push(`🔍 Spring practice exposed more of your roster's traits (${rev} known).`);
+  // over 105: cut lowest
+  while(S.roster.length>105){const w=S.roster.slice().sort((a,b)=>a.ovr-b.ovr)[0];S.roster=S.roster.filter(x=>x!==w);}
+  invalidateProj();
+}
+function rollYear(sum){
+  S.year++;S.cal=buildCalendar(S.year);S.phaseIdx=0;U().yearsAt++;
+  coachGrowth(sum);U().bonusNIL=Math.round(U().bonusNIL*0.5);
+  S.teamIds.forEach(id=>{resetNeeds(T(id));T(id).target=rint(20,25);});
+  newSeason(false);
+  sum.lines.push(`🗓️ The ${S.year} season is here. AP preseason: ${UT().apRank?"#"+UT().apRank:"unranked"}.`);
+}
+
+// ---------- RANDOM EVENTS ----------
+function maybeEvent(){
+  if(R()>0.34||S.events.length)return;
+  const uid=U().teamId;const t=UT();
+  const targets=S.recruits.filter(r=>r.off.includes(uid)&&!r.signed&&r.stars>=3);
+  const pool=[];
+  if(targets.length){
+    const r=pick(targets);
+    pool.push({id:"mom",rid:r.id,title:"📞 A call from home",text:`${rName(r)}'s mother wants to hear directly from Coach ${t.coach.name.split(" ").pop()} this week. It'll cost a head-coach visit slot.`,opts:[["Set it up (uses HC slot)","momYes"],["Have an assistant call instead","momNo"]]});
+    pool.push({id:"rival",rid:r.id,title:"🗣️ Negative recruiting",text:`A rival staff is telling ${rName(r)} that your depth chart is "a parking lot" at ${r.pos}. Respond?`,opts:[["Send him the depth chart & a plan (2h)","rivalYes"],["Ignore it","rivalNo"]]});
+    if(r.stars>=4)pool.push({id:"tweet",rid:r.id,title:"📱 Cryptic post",text:`${rName(r)} just posted a graphic: "Top 3 👀 — decision soon." You're in it. Push now?`,opts:[["Flood the zone (3h, +interest)","tweetYes"],["Stay patient","tweetNo"]]});
+  }
+  pool.push({id:"booster",title:"💼 Booster with strings",text:`A major donor offers ${money(500)} to the collective — if you offer his nephew, a 2★ long snapper. Compliance won't love it.`,opts:[["Take the money","boosterYes"],["Politely decline","boosterNo"]]});
+  pool.push({id:"camp",title:"🏕️ Satellite camp invite",text:`A high school in ${pick(RECRUIT_GEO)[0]} invites your staff to work a camp this weekend. Free scouting on a few prospects, costs 4 hours.`,opts:[["Go (4h)","campYes"],["Pass","campNo"]]});
+  S.events.push(pick(pool));
+}
+function resolveEvent(choice){
+  const e=S.events.shift();if(!e)return "";const r=e.rid?S.recruits.find(x=>x.id===e.rid):null;const uid=U().teamId;let msg="";
+  switch(choice){
+    case "momYes":if(U().hc>0){U().hc--;r.int[uid]+=22;msg=`Mom loved Coach. ${rName(r)} +22 interest.`;}else{r.int[uid]+=6;msg="No HC slot left — an assistant called. +6.";}break;
+    case "momNo":r.int[uid]+=3;msg="She was polite, but you could tell. +3.";break;
+    case "rivalYes":if(canSpend(2)){spend(2);r.int[uid]+=10;msg="Message received. +10.";}else msg="No hours left. The rumor sticks.";break;
+    case "rivalNo":r.int[uid]*=0.93;msg="The narrative stuck a little. Interest −7%.";break;
+    case "tweetYes":if(canSpend(3)){spend(3);r.int[uid]+=16;msg="Your whole staff is in his DMs. +16.";}else msg="Not enough hours.";break;
+    case "tweetNo":msg="You stayed patient.";break;
+    case "boosterYes":U().bonusNIL+=500;U().sec=clamp(U().sec-4,0,100);msg="+$500K to the collective. The AD raised an eyebrow (−4 security).";break;
+    case "boosterNo":U().rep=clamp(U().rep+1,0,100);msg="Integrity noted. +1 reputation.";break;
+    case "campYes":if(canSpend(4)){spend(4);const near=S.recruits.filter(x=>!x.signed).sort(()=>R()-0.5).slice(0,4);near.forEach(x=>x.sc=Math.min(100,x.sc+35));msg="Camp evals filed on: "+near.map(rName).join(", ")+".";}else msg="Not enough hours.";break;
+    case "campNo":msg="You passed on the camp.";break;
+  }
+  return msg;
+}
+
+// ---------- UPGRADES ----------
+function upgrade(k){if(U().upPts<=0||U().up[k]>=5)return false;U().upPts--;U().up[k]++;if(k==="staff")U().hoursMax=40;return true;}
+
+// ---------- NEWS ----------
+function addNews(txt,type,team){S.news.unshift({t:txt,type,team,ph:phase()?phase().label:"",y:S.year});if(S.news.length>400)S.news.length=400;}
+
+// ---------- SAVE ----------
+const SAVE_KEY="cfbRecruitDirector_v6";
+function save(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(S));}catch(e){console.warn("save failed",e);}}
+function load(){try{const s=localStorage.getItem(SAVE_KEY);if(s){S=JSON.parse(s);return true;}}catch(e){}return false;}
+
+// ---------- v2: PROGRAM PERCEPTION, PROGRESSION, DRAFT, COACH GROWTH ----------
+function weeklyProgram(sum,ug){
+  const t=UT();const uid=t.id;
+  // in-season development: starters grow through reps
+  let ups=0;const ris=[];
+  POSITIONS.forEach(pos=>{depth(pos).forEach((p,i)=>{if(p.susp){p.susp--;return;}
+    const starter=i<POS_STARTERS[pos];const room=Math.max(0,p.pot-p.ovr);
+    const ch=(starter?0.16:0.06)*(room>8?1.3:room>3?1:0.4)*traitMult(p,p.yr<=2?"early":"late")*(0.7+t.coach.dev/250);
+    if(R()<ch){p.ovr=Math.min(99,p.ovr+1);ups++;if(R()<0.15)ris.push(p);}
+    // exposure reveals traits
+    revealTrait(p,"any",starter?0.05:0.025,null);
+    if(hasT(p,"party")&&R()<0.015){p.susp=rint(1,2);p.tr.find(x=>x.k==="party").rev=true;sum.lines.push(`🚨 ${p.pos} ${p.fn} ${p.ln} suspended ${p.susp} game${p.susp>1?"s":""} for a team-rules violation.`);addNews(`🚨 ${t.school} suspends ${p.pos} ${p.fn} ${p.ln}.`,"user");}
+    if(hasT(p,"lead"))p.mor=Math.min(100,p.mor+0.3);
+  });});
+  if(ups)sum.lines.push(`💪 Practice report: ${ups} player${ups>1?"s":""} improved this week${ris.length?" — "+ris.slice(0,2).map(p=>p.pos+" "+p.ln+" ("+p.ovr+")").join(", "):""}.`);
+  // boosters react to results
+  if(ug){const L=gameLine(ug,uid);const opp=L.opp!=="FCS"?T(L.opp):null;
+    const big=L.w&&opp&&opp.apRank;const streak=t.streak;
+    if(L.w){gainDXP(4);gainPC(1);}
+    if(opp&&isRival(uid,opp.id)){const a=U().ad;if(L.w){a.commit=clamp(a.commit+2,0,100);U().sec=clamp(U().sec+2,0,100);gainPC(3);gainDXP(10);sum.lines.push(`⚔️ RIVALRY WIN over ${opp.school}! Boosters are buying rounds, and head-to-head recruits are leaning your way. ${seriesStr(uid,opp.id)}`);}
+      else{a.commit=clamp(a.commit-2,0,100);U().sec=clamp(U().sec-3,0,100);sum.lines.push(`⚔️ Lost to rival ${opp.school}. That one stings on the trail — and in the AD's office. ${seriesStr(uid,opp.id)}`);}}
+    if(L.w&&(big||streak>=3)&&R()<(0.3+Math.max(0,t.mom)/25)*(hasPerk("n4")?1.5:1)){const amt=Math.round((60+t.prestige*2+Math.max(0,t.mom)*30+(big?(30-opp.apRank)*10:0))*rnd(0.7,1.4)/5)*5;U().bonusNIL+=amt;
+      const m=`💰 ${big?"After the win over #"+opp.apRank+" "+opp.school:"Riding a "+streak+"-game win streak"}, a booster pledges ${money(amt)} to the collective.`;sum.lines.push(m);addNews(m,"user");}
+    if(!L.w&&streak<=-3&&R()<0.25){const amt=Math.round(rnd(80,250)/5)*5;U().bonusNIL=Math.max(0,U().bonusNIL-amt);const m=`📉 Donors are frustrated by the losing streak — ${money(amt)} in pledges pulled.`;sum.lines.push(m);addNews(m,"user");}
+    if(t.mom>=6&&R()<0.25)sum.lines.push(`🔥 ${t.school} is the hottest program in the country right now. Recruits notice.`);
+  }
+}
+function programPerception(sum){
+  const uid=U().teamId;const notes=[];
+  S.teamIds.forEach(id=>{const t=T(id);t.prev={prestige:t.prestige,nil:t.nil,fac:t.fac};
+    const exp=3.5+(t.prestige-38)/60*6.5+(t.bowl?0.5:0)+0.6*(t.cfpW||0)*0;let d=(t.w-(t.cfpW||0)-(t.bowl&&t.bowl.w?1:0)-exp)*0.32;
+    const inCFP=S.cfpField&&S.cfpField.seeds.includes(id);
+    if(inCFP)d+=1.2+(t.cfpW||0)*0.8+(S.cfpField.champ===id?1.5:0);
+    else if(t.bowl)d+=t.bowl.w?0.6:-0.3;else if(t.w<6)d-=0.4;
+    if(t.champ)d+=0.7;if(t.apRank&&t.apRank<=10)d+=0.5;
+    d+=0.45*(t.rivW||0)-0.55*(t.rivL||0);
+    const c5=S.recruits.filter(r=>r.com===id&&r.stars===5).length;d+=Math.min(1,c5*0.2);
+    d+=(t.base-t.prestige)*0.06; // gravity toward historical brand
+    d=clamp(d,-3,3.5);t.prestige=clamp(Math.round((t.prestige+d)*10)/10,20,99);
+    // collectives follow winning
+    let nd=d*0.15+(t.mom||0)*0.02;t.nil=clamp(Math.round((t.nil+clamp(nd,-0.5,0.6))*10)/10,1,10);
+    // facilities: winners build, losers fall behind slowly
+    if(d>1.2&&t.nil>=4&&R()<0.3){const g=rint(3,7);t.fac=clamp(t.fac+g,40,100);t.facNews=g;if(id===uid||t.prestige>=70)addNews(`🏗️ ${t.school} announces a new football facility project (+${g} facilities).`,id===uid?"user":"coach",id);}
+    else if(R()<0.25)t.fac=clamp(t.fac-1,40,100);
+  });
+  adYearly(sum);
+  const t=UT();const p0=t.prev;
+  const ch=(k,lbl,fmt)=>{const dv=Math.round((t[k]-p0[k])*10)/10;return dv?`${lbl} ${fmt?fmt(p0[k]):Math.round(p0[k])} → ${fmt?fmt(t[k]):Math.round(t[k])} (${dv>0?"+":""}${dv})`:null;};
+  const parts=[ch("prestige","Prestige",v=>v.toFixed(1)),ch("nil","NIL power",v=>v.toFixed(1)),ch("fac","Facilities")].filter(Boolean);
+  if(parts.length){const up=t.prestige>=p0.prestige;sum.lines.push(`${up?"📈":"📉"} Program perception: ${parts.join(" · ")}.`);addNews(`${up?"📈":"📉"} ${t.school} perception after the season: ${parts.join(" · ")}.`,"user");}
+  // biggest national movers
+  const movers=S.teamIds.map(id=>({id,d:T(id).prestige-T(id).prev.prestige})).sort((a,b)=>b.d-a.d);
+  if(movers[0].d>=2)addNews(`📈 Rising programs: ${movers.slice(0,3).map(m=>T(m.id).school+" (+"+m.d.toFixed(1)+")").join(", ")}.`,"rank");
+  if(movers[movers.length-1].d<=-2)addNews(`📉 Slipping: ${movers.slice(-3).reverse().map(m=>T(m.id).school+" ("+m.d.toFixed(1)+")").join(", ")}.`,"rank");
+}
+function coachGrowth(sum){
+  const uid=U().teamId;
+  S.teamIds.forEach(id=>{const t=T(id);const c=t.coach;const exp=3.5+(t.prestige-38)/60*6.5;const perf=t.w-exp;
+    const before=[c.rec,c.dev,c.game];
+    const young=(c.yrs||0)<4;
+    c.rec=clamp(Math.round(c.rec+clamp(perf*0.25,-1.2,1.2)+(young?rnd(0,1.4):0)+(t.mom>4?0.6:0)-(c.rec-74)*0.05),40,99);
+    c.game=clamp(Math.round(c.game+clamp(perf*0.25,-1,1.5)+(young?rnd(0,1.2):rnd(-0.6,0.4))-(c.game-76)*0.04),40,99);
+    c.dev=clamp(Math.round(c.dev+(young?rnd(0,1.2):rnd(-0.4,0.6))+(proScore(t)>6?0.4:0)),40,99);
+    if(id===uid){const d=[c.rec-before[0],c.dev-before[1],c.game-before[2]];if(d.some(x=>x))sum.lines.push(`🧢 Coach ${c.name} evolves: REC ${c.rec} (${d[0]>=0?"+":""}${d[0]}) · DEV ${c.dev} (${d[1]>=0?"+":""}${d[1]}) · GAME ${c.game} (${d[2]>=0?"+":""}${d[2]}).`);}
+  });
+}
+function draftRound(o){return o>=91?1:o>=88?2:o>=85?3:o>=83?4:o>=81?5:o>=79?6:o>=77?7:0;}
+function nflDraft(sum){
+  const uid=U().teamId;const pool=(S.draftPool||[]).map(p=>({...p,rd:draftRound(p.ovr+rint(-2,2))}));
+  const picks=pool.filter(p=>p.rd).sort((a,b)=>a.rd-b.rd);
+  S.teamIds.forEach(id=>{const t=T(id);let n;if(id===uid)n=picks.length;else n=Math.max(0,Math.round((t.talent-62)/3.2+gauss(0,1.5)));t.pro=(t.pro||[]).concat([n]).slice(-3);t.lastDraft=n;});
+  S.lastDraft={y:S.year,picks};
+  const r1=picks.filter(p=>p.rd===1).length;
+  if(picks.length){sum.lines.push(`🏈 NFL Draft: ${picks.length} ${UT().school} player${picks.length>1?"s":""} drafted${r1?` (${r1} first-rounder${r1>1?"s":""})`:""}. "NFL Development" pitch just got stronger.`);
+    picks.slice(0,4).forEach(p=>sum.lines.push(`   • Round ${p.rd}: ${p.pos} ${p.n}${p.mine?` — signed by you as a ${p.stars}★`:""}`));
+    addNews(`🏈 NFL Draft: ${UT().school} produces ${picks.length} draft picks.`,"user");
+    const mine=picks.filter(p=>p.mine).length;picks.filter(p=>p.mine).forEach(p=>gainDXP(p.rd===1?50:25));if(mine){gainXP("eval",mine*4);U().rep=clamp(U().rep+mine*0.8,0,100);}
+  }else sum.lines.push(`🏈 NFL Draft: no ${UT().school} players selected this year.`);
+  const top=S.teamIds.slice().sort((a,b)=>T(b).lastDraft-T(a).lastDraft).slice(0,3);
+  addNews(`🏈 Most NFL draft picks: ${top.map(id=>T(id).school+" ("+T(id).lastDraft+")").join(", ")}.`,"rank");
+}
+function followCoach(to){
+  const oldId=U().teamId;const c=T(to).coach.name;
+  // commits who were there for the coach may follow him
+  let moved=0;S.recruits.forEach(r=>{if(r.com===oldId&&!r.signed&&r.mot[MOTIVE_IDX.coach]>0.12&&R()<0.6){decommit(r,"following "+c);if(!r.off.includes(to))r.off.push(to);r.int[to]=(r.int[to]||0)+(r.int[oldId]||0)*0.8;moved++;}});
+  takeJob(to);U().rep=clamp(U().rep+2,0,100);
+  return moved;
+}
+function marketOffers(n,maxP){const uid=U().teamId;const cap=maxP||UT().prestige+5;return S.teamIds.filter(id=>id!==uid&&T(id).prestige<=cap&&T(id).prestige>=Math.min(cap-35,U().rep-30)).sort(()=>R()-0.5).slice(0,n);}
+
+// ---------- v3: DIRECTOR CAREER ----------
+function hasPerk(k){return !!(S&&S.user&&S.user.perks&&S.user.perks[k]);}
+function dxpNeed(l){return 100+l*60;}
+function dirTitle(l){let t=DIR_TITLES[0][1];DIR_TITLES.forEach(([lv,n])=>{if(l>=lv)t=n;});return t;}
+function gainDXP(n){const u=U();if(!u||u.lvl===undefined)return;u.dxp+=n;let need=dxpNeed(u.lvl);
+  while(u.lvl<30&&u.dxp>=need){u.dxp-=need;u.lvl++;u.pp++;need=dxpNeed(u.lvl);const m=`⭐ Director level ${u.lvl} — ${dirTitle(u.lvl)}. +1 perk point.`;addNews(m,"user");(S._lvl=S._lvl||[]).push(m);u.rep=clamp(u.rep+1,0,100);}}
+function perkAvail(k){const p=PERKS.find(x=>x.k===k);const br=PERKS.filter(x=>x.b===p.b);const i=br.indexOf(p);return !hasPerk(k)&&(i===0||hasPerk(br[i-1].k));}
+function buyPerk(k){if(U().pp<=0||!perkAvail(k))return false;U().pp--;U().perks[k]=1;if(k==="n1"||k==="c2"){U().hours+=k==="n1"?4:0;if(k==="c2")U().hc++;}return true;}
+function actCost(type){if(type==="film"&&hasPerk("e1"))return 1;return ACT[type]?ACT[type].h:0;}
+// ---------- v3: ADMINISTRATION ----------
+function initAD(){const t=UT();const base=(SCHOOL_RULES[t.id]&&SCHOOL_RULES[t.id].acad)||(t.acad>=95?"strict":t.acad>=85?"moderate":"flexible");
+  S.user.ad={commit:Math.round(40+t.prestige*0.4),pc:20,nil:0,staff:0,ov:0,waiv:0,waivUsed:0,tier:base,honor:!!(SCHOOL_RULES[t.id]&&SCHOOL_RULES[t.id].honor),lastReq:-1,log:[]};}
+function tierOf(t){if(t.id===U().teamId&&U().ad)return U().ad.tier;return (SCHOOL_RULES[t.id]&&SCHOOL_RULES[t.id].acad)||(t.acad>=95?"strict":t.acad>=85?"moderate":"flexible");}
+function minGPA(t){return TIER_GPA[tierOf(t)];}
+function admitIssue(r,tid){const t=T(tid);if(!t||r.portal)return null;const mg=minGPA(t);if(r.gpa<mg)return `GPA ${r.gpa.toFixed(2)} below the ${mg.toFixed(1)} standard`;
+  const honor=tid===U().teamId?U().ad.honor:!!(SCHOOL_RULES[tid]&&SCHOOL_RULES[tid].honor);if(honor&&r.chr<38)return "honor-code / character review";return null;}
+function waiversLeft(){const a=U().ad;return Math.max(0,TIER_WAIV[a.tier]+a.waiv-a.waivUsed);}
+function userSignCheck(r){const ai=admitIssue(r,U().teamId);if(!ai)return true;const a=U().ad;
+  if(waiversLeft()>0){a.waivUsed++;addNews(`📝 Admissions waiver used to sign ${rName(r)} (${ai}).`,"user");return true;}
+  const deny=a.tier==="strict"?1:0.55;
+  if(R()<deny){const t=UT();r.com=null;r.int[U().teamId]=0;r.off=r.off.filter(x=>x!==U().teamId);addNews(`🚫 Admissions denied ${r.stars}★ ${r.pos} ${rName(r)} (${ai}). He's back on the market.`,"user");
+    if(S.summary)S.summary.lines.push(`🚫 Admissions turned down ${rName(r)} (${ai}). He reopens his recruitment.`);return false;}
+  addNews(`😅 ${rName(r)} squeaks through admissions despite ${ai}.`,"user");return true;}
+function gainPC(n){const a=U().ad;if(!a)return;a.pc=clamp(a.pc+n*(hasPerk("x3")?1.5:1),0,100);}
+function adRequest(k){
+  const a=U().ad;const t=UT();const q=AD_REQS.find(x=>x.k===k);
+  if(a.lastReq===S.tick)return {ok:false,msg:"The AD already took a meeting with you this week."};
+  if(a.pc<q.pc)return {ok:false,msg:`You need ${q.pc} political capital (have ${Math.round(a.pc)}).`};
+  if(k==="relax"&&a.tier==="flexible")return {ok:false,msg:"Your standards are already as flexible as they get."};
+  a.lastReq=S.tick;
+  let p=0.3+a.commit/200+(t.mom||0)/40+(hasPerk("x3")?0.15:0)+(U().rep-50)/250;
+  if(k==="waiv")p+=a.tier==="strict"?-0.1:0.35;
+  if(k==="relax")p=(t.acad>=95?0.06:a.tier==="strict"?0.18:0.32)+a.commit/400+(hasPerk("x3")?0.1:0);
+  if(k==="fac")p-=0.05;
+  p=clamp(p,0.03,0.95);
+  if(R()<p){a.pc-=q.pc;
+    if(k==="nil")a.nil+=800;if(k==="staff"){a.staff+=4;a.ov+=2;U().hours+=4;}if(k==="fac"){t.fac=clamp(t.fac+5,40,100);t.prestige=clamp(t.prestige+0.5,20,99);}
+    if(k==="waiv")a.waiv++;if(k==="relax")a.tier=TIER_ORDER[Math.min(2,TIER_ORDER.indexOf(a.tier)+1)];
+    a.commit=clamp(a.commit-2,0,100);const m=`✅ AD approved: ${q.n}.`;a.log.unshift(`${S.year} ${phase().label}: ${m}`);addNews(m,"user");gainDXP(10);return {ok:true,msg:m};}
+  a.pc-=Math.round(q.pc/2);a.commit=clamp(a.commit-1,0,100);const m=`❌ AD declined: ${q.n}. ("Come back when we're winning more.")`;a.log.unshift(`${S.year} ${phase().label}: ${m}`);return {ok:false,msg:m};
+}
+function adYearly(sum){
+  const a=U().ad;if(!a)return;const t=UT();const exp=3.5+(t.prestige-38)/60*6.5;const perf=t.w-exp;
+  const cfp=S.cfpField&&S.cfpField.seeds.includes(t.id);
+  const post=cfp?3+(t.cfpW||0)*2+(S.cfpField.champ===t.id?5:0):t.bowl?(t.bowl.w?2:0):-1;
+  const before=a.commit;a.commit=clamp(Math.round(a.commit+(perf-(t.cfpW||0))*1.5+post+(t.champ?2:0)+(t.rivW||0)*1.5-(t.rivL||0)*2+(50-a.commit)*0.05),0,100);
+  sum.lines.push(`🏛️ AD commitment to football: ${before} → ${a.commit}.`);
+  if(a.commit>=75&&perf>1){const amt=Math.round((200+perf*80+(cfp?250:0))/50)*50;a.nil+=amt;sum.lines.push(`🏛️ The university doubles down: +${money(amt)}/yr in player-comp funding.`);addNews(`🏛️ ${t.school} increases its football investment by ${money(amt)}/yr.`,"user");}
+  if(a.commit<30&&perf<-1){const cut=Math.min(a.nil,400);a.nil-=cut;if(a.staff>0)a.staff-=2;sum.lines.push(`🏛️ Budget cuts: the AD trimmed ${money(cut)} and recruiting staff support.`);}
+}
+// ---------- v3: PIPELINES ----------
+function genHS(){
+  S.hs=[];let id=1;
+  RECRUIT_GEO.forEach(g=>{const n=Math.max(3,Math.round(g[1]*6));const used=new Set();
+    for(let i=0;i<n;i++){const city=pick(g[4]);let nm;let k=0;do{nm=city+" "+pick(HS_SUFFIX);k++;}while(used.has(nm)&&k<20);used.add(nm);
+      S.hs.push({id:id++,name:nm,city,st:g[0],lat:g[2]+rnd(-1.1,1.1),lon:g[3]+rnd(-1.3,1.3),coach:pick(FIRST)+" "+pick(LAST),lvl:Math.round(clamp(Math.exp(gauss(3.6,0.55)),10,100))});}});
+}
+function hsById(id){return S.hs?S.hs.find(h=>h.id===id):null;}
+function pipeHS(r){return (r.hs&&U().pipe.hs[r.hs])||0;}
+function pipeSt(r){return U().pipe.st[r.st]||0;}
+function pipeMult(r){if(!r||r.portal)return 1;return 1+pipeSt(r)/250+pipeHS(r)/150;}
+function pipeLabel(v){return v>=70?"Elite":v>=45?"Strong":v>=20?"Established":v>0?"Budding":"None";}
+function growPipe(r,hsAmt,stAmt){if(!r||r.portal)return;const m=hasPerk("n2")?2:1;const P=U().pipe;
+  if(r.hs){const b=P.hs[r.hs]||0;P.hs[r.hs]=clamp(b+hsAmt*m,0,100);if(b<45&&P.hs[r.hs]>=45){const h=hsById(r.hs);if(h)addNews(`🔗 Pipeline: your relationship with ${h.name} (Coach ${h.coach}) is now Strong.`,"user");}}
+  const sb=P.st[r.st]||0;P.st[r.st]=clamp(sb+stAmt*m,0,100);if(sb<45&&P.st[r.st]>=45)addNews(`🔗 State pipeline: you're now a Strong presence in ${STATE_NAMES[r.st]||r.st}.`,"user");}
+function decayPipes(){const P=U().pipe;Object.keys(P.hs).forEach(k=>{P.hs[k]=Math.round(P.hs[k]*0.88*10)/10;if(P.hs[k]<2)delete P.hs[k];});Object.keys(P.st).forEach(k=>{P.st[k]=Math.round(P.st[k]*0.9*10)/10;if(P.st[k]<2)delete P.st[k];});}
+function seedPipelines(list){
+  if(!U().pipe)return;const uid=U().teamId;let n=0;
+  list.forEach(r=>{const h=pipeHS(r),st=pipeSt(r);if(h<20&&st<40)return;
+    if(h>=20){r.sc=Math.min(100,r.sc+Math.round(h/3));const unk=MOTIVES.map((m,i)=>i).filter(i=>!(r.known&(1<<i)));if(unk.length){r.known|=(1<<wpick(unk,x=>r.mot[x]));}if(h>=55)revealTrait(r,"any",1,null);n++;}
+    r.int[uid]=(r.int[uid]||0)+h/8+(st>=40?st/15:0);r.pipe=true;});
+  if(n&&!S._presim&&S.summary)S.summary.lines.push(`🔗 Your high-school pipelines already sent film and the inside scoop on ${n} new prospects.`);
+}
+
+// ---------- v4: RIVALS & BOWLS ----------
+let _rivSet=null;
+function isRival(a,b){if(!_rivSet){_rivSet=new Set();RIVALS.concat(RIVAL_EXTRA).forEach(([x,y])=>{_rivSet.add(x+"|"+y);_rivSet.add(y+"|"+x);});}return _rivSet.has(a+"|"+b);}
+function rivalsOf(id){return RIVALS.concat(RIVAL_EXTRA).filter(p=>p.includes(id)).map(p=>p[0]===id?p[1]:p[0]).filter(x=>T(x));}
+function seriesStr(a,b){const k=[a,b].sort().join("|");const s=(S.series||{})[k]||{};return `Series since 2026: ${T(a).abbr} ${s[a]||0}–${s[b]||0} ${T(b).abbr}.`;}
+function playBowls(sum){
+  const uid=U().teamId;const seeds=S.cfpField?S.cfpField.seeds:[];
+  const elig=S.teamIds.filter(id=>T(id).w>=6&&!seeds.includes(id)).sort((a,b)=>T(b).elo-T(a).elo);
+  const names=shuffle(BOWLS.slice());let bi=0;const used=new Set();
+  for(let i=0;i<elig.length;i++){const a=elig[i];if(used.has(a))continue;
+    let b=null;for(let j=i+1;j<Math.min(elig.length,i+5);j++){if(!used.has(elig[j])&&T(elig[j]).conf!==T(a).conf){b=elig[j];break;}}
+    if(!b)for(let j=i+1;j<elig.length;j++){if(!used.has(elig[j])){b=elig[j];break;}}
+    if(!b)break;used.add(a);used.add(b);
+    const name=names[bi++%names.length];const g={id:S.nextId++,wk:16,h:a,a:b,hs:0,as:0,done:false,kind:"bowl",neutral:true,label:name};
+    S.games.push(g);simGame(g);const w=winner(g),l=w===a?b:a;T(w).bowl={name,w:true};T(l).bowl={name,w:false};T(w).mom=clamp((T(w).mom||0)+1.2,-10,10);
+    if(a===uid||b===uid){const L=gameLine(g,uid);sum.lines.push(`🏈 ${name}: ${L.w?"WIN":"LOSS"} ${L.ms}-${L.os} vs ${L.oname}.${L.w?" A bowl win carries into the offseason.":""}`);addNews(`🏈 ${name}: ${UT().school} ${L.w?"beats":"loses to"} ${L.oname} ${L.ms}-${L.os}.`,"user");if(L.w){gainPC(2);gainDXP(12);}}
+  }
+  if(!seeds.includes(uid)&&UT().w<6)sum.lines.push("🛑 No bowl this year. Rival staffs will make sure recruits hear about it.");
+  addNews(`🏈 Bowl season: ${Math.floor(used.size/2)} bowl games played.`,"game");
+}
