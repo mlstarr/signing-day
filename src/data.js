@@ -199,29 +199,6 @@ const MOTIVE_IDX = {}; MOTIVES.forEach((m,i)=>MOTIVE_IDX[m[0]]=i);
 const FCS_OPPS = ["Furman","Sacramento State","Montana","Montana State","North Dakota State","South Dakota State","Idaho","UC Davis","Villanova","Delaware State","Mercer","Chattanooga","Samford","Eastern Kentucky","Austin Peay","Southern Utah","Northern Arizona","Abilene Christian","Incarnate Word","Prairie View A&M","Jackson State","Alabama A&M","Western Carolina","The Citadel","Wofford","Charleston Southern","Kennesaw State","Tennessee Tech","Lafayette","Bucknell","Holy Cross","Maine","Rhode Island","Youngstown State","Illinois State","Northern Iowa","Southeast Missouri","UT Martin","Nicholls","McNeese","Southeastern Louisiana","Stephen F. Austin","Tarleton State","Weber State","Portland State","Eastern Washington","Cal Poly","Florida A&M","Bethune-Cookman","Norfolk State"];
 
 // Season calendar for each cycle. Week labels use the season year.
-function buildCalendar(yr){
-  const cal=[];
-  const wkDates=["Aug 29","Sep 5","Sep 12","Sep 19","Sep 26","Oct 3","Oct 10","Oct 17","Oct 24","Oct 31","Nov 7","Nov 14","Nov 21","Nov 28"];
-  cal.push({key:"pre",label:"Preseason",date:"Aug 22",type:"pre"});
-  for(let w=0;w<=13;w++) cal.push({key:"w"+w,label:"Week "+w,date:wkDates[w],type:"game",week:w});
-  cal.push({key:"esp",label:"Early Signing Period",date:"Dec 2",type:"esp"});
-  cal.push({key:"ccg",label:"Championship Weekend",date:"Dec 5",type:"ccg"});
-  cal.push({key:"sel",label:"CFP Selection & Carousel",date:"Dec 6",type:"sel"});
-  cal.push({key:"cfp1",label:"CFP First Round",date:"Dec 19",type:"cfp",round:1});
-  cal.push({key:"cfpq",label:"CFP Quarterfinals",date:"Jan 1",type:"cfp",round:2});
-  cal.push({key:"portal1",label:"Transfer Portal: Opening Days",date:"Jan 5",type:"portal"});
-  cal.push({key:"cfps",label:"CFP Semifinals",date:"Jan 9",type:"cfp",round:3});
-  cal.push({key:"portal2",label:"Transfer Portal: Closing Window",date:"Jan 14",type:"portal"});
-  cal.push({key:"cfpf",label:"CFP National Championship",date:"Jan 18",type:"cfp",round:4});
-  cal.push({key:"nsd",label:"National Signing Day",date:"Feb 3",type:"nsd"});
-  cal.push({key:"spring1",label:"Junior Days",date:"Mar",type:"off"});
-  cal.push({key:"spring2",label:"Spring Practice Visits",date:"Apr",type:"off"});
-  cal.push({key:"spring3",label:"Spring Evaluation Period",date:"May",type:"off"});
-  cal.push({key:"ov1",label:"Official Visits I",date:"Jun 5",type:"ov"});
-  cal.push({key:"ov2",label:"Official Visits II",date:"Jun 19",type:"ov"});
-  cal.push({key:"jul",label:"Commitment Season",date:"Jul",type:"off"});
-  return cal;
-}
 const BOWLS = ["Las Vegas Bowl","Citrus Bowl","ReliaQuest Bowl","Gator Bowl","Alamo Bowl","Holiday Bowl","Music City Bowl","Pop-Tarts Bowl","Texas Bowl","Duke's Mayo Bowl","Liberty Bowl","Sun Bowl","Pinstripe Bowl","Armed Forces Bowl","Birmingham Bowl","Independence Bowl","First Responder Bowl","Hawai'i Bowl","Arizona Bowl","Boca Raton Bowl"];
 const CFP_BOWLS = {qf:["Cotton Bowl","Orange Bowl","Rose Bowl","Sugar Bowl"], sf:["Fiesta Bowl","Peach Bowl"], f:"CFP National Championship — Allegiant Stadium, Las Vegas"};
 
@@ -310,3 +287,38 @@ const RIVAL_EXTRA=[["texas","oklahoma"],["alabama","tennessee"],["alabama","lsu"
  ["wisconsin","iowa"],["virginia-tech","west-virginia"],["boise-state","fresno-state"],["texas","texas-tech"],["army","air-force"],["navy","air-force"],["byu","boise-state"],["pitt","penn-state"],["kansas","missouri"]];
 const SERVICES={A:"PrepGrid 300",B:"Blue Chip Index"};
 BOWLS.push("Gasparilla Bowl","Frisco Bowl","Myrtle Beach Bowl","New Mexico Bowl","LA Bowl","Famous Idaho Potato Bowl","Camellia Bowl","Cure Bowl","Bahamas Bowl","Military Bowl","Fenway Bowl","Salute to Veterans Bowl","Rate Bowl","Xbox Bowl","New Orleans Bowl","Tailgate Bowl");
+
+// ===== v5 DATA =====
+function buildCalendar(yr){
+  const cal=[];
+  const wkDates=["Aug 29","Sep 5","Sep 12","Sep 19","Sep 26","Oct 3","Oct 10","Oct 17","Oct 24","Oct 31","Nov 7","Nov 14","Nov 21","Nov 28"];
+  cal.push({key:"pre",label:"Preseason",date:"Aug 22",type:"pre"});
+  for(let w=0;w<=13;w++) cal.push({key:"w"+w,label:"Week "+w,date:wkDates[w],type:"game",week:w});
+  cal.push({key:"esp",label:"Early Signing Period",date:"Dec 2",type:"esp",dead:true});
+  cal.push({key:"ccg",label:"Championship Weekend",date:"Dec 5",type:"ccg"});
+  cal.push({key:"sel",label:"CFP Selection, Bowls & Carousel",date:"Dec 6",type:"sel"});
+  cal.push({key:"cfp1",label:"CFP First Round",date:"Dec 19",type:"cfp",round:1,dead:true});
+  cal.push({key:"cfpq",label:"CFP Quarterfinals",date:"Jan 1",type:"cfp",round:2,dead:true});
+  cal.push({key:"portal1",label:"Transfer Portal: Opening Days",date:"Jan 5",type:"portal"});
+  cal.push({key:"cfps",label:"CFP Semifinals",date:"Jan 9",type:"cfp",round:3});
+  cal.push({key:"allstar",label:"All-American Bowl Week",date:"Jan 10",type:"allstar"});
+  cal.push({key:"portal2",label:"Transfer Portal: Closing Window",date:"Jan 14",type:"portal"});
+  cal.push({key:"cfpf",label:"CFP National Championship",date:"Jan 18",type:"cfp",round:4});
+  cal.push({key:"nsd",label:"National Signing Day",date:"Feb 3",type:"nsd"});
+  cal.push({key:"spring1",label:"Junior Days",date:"Mar",type:"off"});
+  cal.push({key:"spring2",label:"Spring Practice & NFL Draft",date:"Apr",type:"off"});
+  cal.push({key:"spring3",label:"Spring Evaluation Period",date:"May",type:"off"});
+  cal.push({key:"camp",label:"Camp Season",date:"Jun 1",type:"camp"});
+  cal.push({key:"ov1",label:"Official Visits I",date:"Jun 12",type:"ov"});
+  cal.push({key:"ov2",label:"Official Visits II",date:"Jun 26",type:"ov"});
+  cal.push({key:"jul",label:"Commitment Season",date:"Jul",type:"off"});
+  return cal;
+}
+const STAFF_ROLES=[{k:"oc",n:"Offensive Coordinator",pos:["QB"],side:"off"},{k:"dc",n:"Defensive Coordinator",pos:["LB","S"],side:"def"},
+ {k:"op",n:"Offensive Position Coach",pos:null,side:"off"},{k:"dp",n:"Defensive Position Coach",pos:null,side:"def"},{k:"rc",n:"Recruiting Coordinator",pos:[],side:null}];
+const POS_GROUPS={off:[["WR","TE"],["OL"],["RB"]],def:[["DL","EDGE"],["CB"]]};
+const CAMP_REGIONS=[["Southeast Elite Camp",["FL","GA","AL","SC","MS","TN","LA"]],["Lone Star Camp",["TX","OK","AR","LA"]],["West Coast Showcase",["CA","AZ","NV","UT","WA","OR","HI","CO","ID","NM"]],["Midwest–Northeast Camp",["OH","MI","IL","IN","PA","NJ","NY","MD","VA","WI","MN","IA","MO","KY","MA","CT","WV","KS","NE"]]];
+const HANDLER_KINDS=["trainer","7-on-7 coach","uncle","\"family advisor\""];
+const PARENT_KINDS={acad:"Mom wants a real degree plan",pt:"Dad wants a path to early playing time",close:"Grandma wants him close enough to visit",faith:"Family wants a strong faith community",dad:"Dad played college ball and runs point on the recruitment"};
+const DIFF_MULT={easy:0.85,normal:1.1,hard:1.35};
+const SAVE_VER=7;

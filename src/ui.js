@@ -1,6 +1,6 @@
 // ===== UI =====
 const $=s=>document.querySelector(s);
-const ui={tab:"home",board:{st:"targets",pos:"ALL",stars:0,reg:"all",sort:"rank",q:"",n:40},news:"mine",poll:"ap",conf:"SEC",scoreWk:null,team:"roster",cls:"mine",office:"dir"};
+const ui={tab:"home",board:{st:"targets",pos:"ALL",stars:0,reg:"all",sort:"rank",q:"",n:40,cls:0},news:"mine",poll:"ap",conf:"SEC",scoreWk:null,team:"roster",cls:"mine",office:"dir"};
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function lum(hex){const h=hex.replace("#","");const r=parseInt(h.substr(0,2),16)/255,g=parseInt(h.substr(2,2),16)/255,b=parseInt(h.substr(4,2),16)/255;return 0.299*r+0.587*g+0.114*b;}
 function badge(id,big){if(id==="FCS")return `<span class="bdg fcs${big?" big":""}">FCS</span>`;const t=T(id);if(!t)return "";const fg=lum(t.c1)>0.6?"#111":"#fff";
@@ -10,7 +10,7 @@ function stars(n){return `<span class="stars s${n}">${"★".repeat(n)}<span clas
 function yrLabel(y){return ["","FR","SO","JR","SR","5th"][Math.min(5,y)]||"SR";}
 function htStr(i){return Math.floor(i/12)+"'"+(i%12)+'"';}
 function toast(msg,bad){const t=document.createElement("div");t.className="toast"+(bad?" bad":"");t.innerHTML=msg;document.body.appendChild(t);setTimeout(()=>t.classList.add("show"),10);setTimeout(()=>{t.classList.remove("show");setTimeout(()=>t.remove(),300);},3200);}
-function recById(id){id=+id;return S.recruits.find(r=>r.id===id)||S.portal.find(r=>r.id===id);}
+function recById(id){return findRec(id);}
 function rec(r){return r;}
 function pct(x){return Math.round(x*100)+"%";}
 function rec1(n){return Math.round(n*10)/10;}
@@ -109,9 +109,9 @@ function showPendingJob(next){
   const j=S.pendingJob;const t=UT();let h="";
   const done=()=>{S.pendingJob=null;save();closeSheet();render();next();};
   if(j.type==="follow"){const to=T(j.to);
-    h=`<h2>🧳 ${esc(j.coach)} is leaving</h2><p><b>${esc(to.school)}</b> just hired your head coach. He wants you to come with him and run recruiting there.</p>
+    h=`<h2>🧳 ${esc(j.coach)} is leaving</h2><p><b>${esc(to.school)}</b> just hired ${j.role?"your "+esc(j.role):"your head coach"}${j.role?" as its head coach":""}. He wants you to come with him and run recruiting there.</p>
      <div class="card in"><div class="grid4"><div class="stat"><b>${Math.round(to.prestige)}</b><span>Prestige</span></div><div class="stat"><b>${to.nil.toFixed(1)}</b><span>NIL power</span></div><div class="stat"><b>${Math.round(to.fac)}</b><span>Facilities</span></div><div class="stat"><b>${to.w}-${to.l}</b><span>Record</span></div></div>
-     <p class="small muted">Stay and ${esc(t.school)} promotes ${esc(j.newCoach)}. Follow and some of your commits who signed up for Coach may follow too — the rest stay behind.</p></div>
+     <p class="small muted">${j.role?`Stay and keep working for ${esc(j.newCoach)}.`:`Stay and ${esc(t.school)} promotes ${esc(j.newCoach)}.`} Follow and some of your commits who signed up for Coach may follow too — the rest stay behind.</p></div>
      <div class="col"><button class="btn pri" id="pjA">Follow ${esc(j.coach)} to ${esc(to.school)}</button><button class="btn" id="pjB">Stay at ${esc(t.school)} with ${esc(j.newCoach)}</button></div>`;
     openSheet(h,"job");
     $("#pjA").onclick=()=>{const n=followCoach(j.to);setGoals();toast(`Welcome to ${esc(to.school)}!${n?` ${n} recruit${n>1?"s":""} reopened to follow you.`:""}`);done();};
@@ -126,7 +126,7 @@ function showPendingJob(next){
      <div class="col">${o.map(id=>`<button class="btn" data-job="${id}">${badge(id)} ${esc(T(id).school)} — HC ${esc(T(id).coach.name)} · Prestige ${Math.round(T(id).prestige)}</button>`).join("")}<button class="btn" id="pjN">Start a new career</button></div>`;
     openSheet(h,"job");
     document.querySelectorAll("[data-job]").forEach(b=>b.onclick=()=>{takeJob(b.dataset.job);setGoals();toast(`You're the new recruiting director at ${T(b.dataset.job).school}.`);done();});
-    $("#pjN").onclick=()=>{try{localStorage.removeItem(SAVE_KEY);}catch(e){}S=null;closeSheet();render();};return;}
+    $("#pjN").onclick=()=>{deleteSlot(S.slot);S=null;closeSheet();render();};return;}
   if(j.type==="nfl"){h=`<h2>🏈 ${esc(j.old)} heads to the NFL</h2><p>${esc(t.school)} hired <b>${esc(j.coach)}</b>, and he's keeping you on.</p><button class="btn pri wide" id="pjA">Back to work</button>`;openSheet(h,"job");$("#pjA").onclick=done;return;}
   done();
 }
@@ -146,7 +146,7 @@ function showFired(sum){
   openSheet(`<h2>📉 You've been let go</h2><p>The AD at ${esc(t.school)} has decided to go in a different direction. A few lower-profile programs are interested.</p>
    <div class="col">${alt.map(id=>`<button class="btn" data-job="${id}">${badge(id)} ${esc(T(id).school)}</button>`).join("")}<button class="btn" id="ngf">Start a new career</button></div>`,"fired");
   document.querySelectorAll("[data-job]").forEach(b=>b.onclick=()=>{takeJob(b.dataset.job);U().rep=clamp(U().rep-5,0,100);setGoals();save();closeSheet();render();});
-  $("#ngf").onclick=()=>{try{localStorage.removeItem(SAVE_KEY);}catch(e){}S=null;closeSheet();render();};
+  $("#ngf").onclick=()=>{deleteSlot(S.slot);S=null;closeSheet();render();};
 }
 
 // ---------- SHEET ----------
@@ -165,27 +165,37 @@ function vHome(){
       if(L.home){const vis=S.recruits.filter(r=>r.ov.includes(p.key));h+=`<p>🏟️ Official visitors this weekend: ${vis.length?vis.map(r=>`<a data-rid="${r.id}">${esc(rName(r))}</a>`).join(", "):"none booked"}.</p>`;}}
     else if(p.type==="game")h+=`<div class="k">${esc(p.label)}</div><div class="hl">Bye week</div><p>No game — a good week for living-room visits.</p>`;
   }else{
-    const tips={esp:"Early Signing Period: committed recruits sign their papers. Lock up wobblers now — most commits will sign this week.",ccg:"Championship weekend. Conference title games decide automatic bids.",sel:"Selection Sunday and the coaching carousel. Watch for openings that shake loose commits.",cfp:"Playoff time. Recruiting is in a quieter stretch, but CFP wins boost every target's interest.",portal:"The transfer portal is open. Veterans commit FAST — offer, call, and put NIL on the table immediately.",nsd:"National Signing Day. Every unsigned recruit makes his decision this week.",off:"Offseason recruiting for next year's class. Junior Days and spring visits build the foundation; June official visits are the main event.",ov:"Official visit weekend. Booked visitors take their trips at the end of this week."};
+    const tips={camp:"Camp season. Work the regional camps and the national showcase to scout dozens of prospects at once, or host your own camp. Testing numbers move the rankings when camp season ends.",allstar:"All-American Bowl week. Uncommitted stars announce on national TV — and practices are a scouting goldmine.",esp:"Early Signing Period: committed recruits sign their papers. Lock up wobblers now — most commits will sign this week.",ccg:"Championship weekend. Conference title games decide automatic bids.",sel:"Selection Sunday and the coaching carousel. Watch for openings that shake loose commits.",cfp:"Playoff time. Recruiting is in a quieter stretch, but CFP wins boost every target's interest.",portal:"The transfer portal is open. Veterans commit FAST — offer, call, and put NIL on the table immediately.",nsd:"National Signing Day. Every unsigned recruit makes his decision this week.",off:"Offseason recruiting for next year's class. Junior Days and spring visits build the foundation; June official visits are the main event.",ov:"Official visit weekend. Booked visitors take their trips at the end of this week."};
     h+=`<div class="k">${esc(p.date)}</div><div class="hl">${esc(p.label)}</div><p>${tips[p.type]||""}</p>`;
+    if(p.dead)h+=`<p>🔕 <b>Dead period:</b> no in-person contact (visits, evals, HC visits). Calls, pitches and NIL only.</p>`;
     if(p.type==="ov"){const vis=S.recruits.filter(r=>r.ov.includes(p.key));h+=`<p>🏟️ Visitors booked: ${vis.length?vis.map(r=>`<a data-rid="${r.id}">${esc(rName(r))}</a>`).join(", "):"none yet"} (${vis.length}/${ovCap(p.key)}).</p>`;}
   }
   h+=`<div class="momline">${momLabel(t.mom)} · Prestige ${Math.round(t.prestige)} · NIL ${t.nil.toFixed(1)}/10</div></div>`;
+  if(p.type==="camp"&&S.camps){h+=`<div class="card"><div class="ch">🏕️ Camp circuit <span class="muted small">⏱ ${U().hours}h left</span></div>${S.camps.map(c=>`<div class="upg"><div><b>${esc(c.n)}</b><div class="small muted">${c.att.length} prospects${c.nat?" · top seniors & elite juniors":" · "+c.sts.slice(0,5).join(", ")+(c.sts.length>5?"…":"")}</div></div><button class="btn sm ${c.done?"":"pri"}" data-camp="${c.id}" ${c.done||U().hours<6?"disabled":""}>${c.done?"Worked":"Attend (6h)"}</button></div>`).join("")}
+    <div class="upg"><div><b>Host the ${esc(t.school)} camp</b><div class="small muted">Nearby & pipeline prospects come to you: scouting + interest + pipelines</div></div><button class="btn sm ${S.campHost?"":"pri"}" id="hostcamp" ${S.campHost||U().hours<8?"disabled":""}>${S.campHost?"Hosted":"Host (8h)"}</button></div></div>`;}
+  if(p.key==="allstar")h+=`<div class="card"><div class="ch">🎙️ All-American Bowl</div><p class="small">The nation's top 100 seniors are in town. Uncommitted stars may announce on TV this week.</p><button class="btn wide ${S.allstar&&S.allstar.done?"":"pri"}" id="asscout" ${U().hours<5||(S.allstar&&S.allstar.done)?"disabled":""}>Scout practices (5h)</button></div>`;
   if(S.retention&&S.retention.length)h+=`<div class="card warn" data-go="team:roster">⚠️ <b>${S.retention.length} players</b> are weighing the transfer portal. Tap to make retention decisions.</div>`;
   if(U().pp>0)h+=`<div class="card warn" id="ppbtn">⭐ <b>${U().pp} perk point${U().pp>1?"s":""}</b> to spend — you're a Lv ${U().lvl} ${esc(dirTitle(U().lvl))}. Tap to open your career tree.</div>`;
   if(S.events.length)h+=`<div class="card warn" id="evbtn">📬 <b>${esc(S.events[0].title)}</b> — decision needed.</div>`;
   // class snapshot
-  const cr=classRankings();const rk=cr.findIndex(x=>x.id===t.id)+1;const mine=S.recruits.filter(r=>r.com===t.id);
+  const cr=classRankings();const rk=cr.findIndex(x=>x.id===t.id)+1;const mine=S.recruits.filter(r=>r.com===t.id&&r.cls===S.classYear);
   h+=`<div class="grid3"><div class="stat" data-go="cls"><b>#${rk}</b><span>Class rank</span></div><div class="stat" data-go="cls"><b>${mine.length}</b><span>Commits</span></div><div class="stat" data-go="board:targets"><b>${targetCount()}</b><span>Priority targets</span></div></div>`;
   // hottest battles
   const battles=S.recruits.filter(r=>S.user.targets[r.id]&&!r.com).map(r=>({r,s:userStanding(r)})).sort((a,b)=>a.r.rank-b.r.rank).slice(0,5);
   if(battles.length)h+=`<div class="card"><div class="ch">🎯 Top battles</div>${battles.map(({r,s})=>recRow(r,true)).join("")}<button class="btn wide" data-go="board:targets">Open priority board</button></div>`;
+  // heisman watch
+  if(S.heisman&&S.heisman.length&&p.type==="game")h+=`<div class="card" data-go="polls:heis"><div class="ch">🏆 Heisman watch</div>${S.heisman.slice(0,3).map((x,i)=>`<div class="lg ${x.id===t.id?"me":""}">${i+1}. ${x.pos} ${esc(x.n)} · ${badge(x.id)} <span class="muted">${esc(x.line)}</span></div>`).join("")}</div>`;
   // goals
   h+=`<div class="card"><div class="ch">🧑‍💼 AD goals — Class of ${S.classYear}</div>${goalStatus().map(g=>`<div class="goal ${g.ok?"ok":""}"><span>${g.ok?"✅":"⬜"} ${esc(g.label)}</span><b>${esc(String(g.cur))}</b></div>`).join("")}</div>`;
   // news
   const f=ui.news;const items=S.news.filter(n=>f==="all"||(f==="mine"?n.type==="user":f==="rec"?["commit","flip","rank"].includes(n.type):f==="games"?n.type==="game":n.type==="coach"||n.type==="portal")).slice(0,60);
-  h+=`<div class="card"><div class="ch">📰 Newswire</div><div class="chips">${[["mine","My program"],["rec","Recruiting"],["games","Games"],["coach","Carousel/Portal"],["all","All"]].map(([k,l])=>`<button class="cp ${f===k?"on":""}" data-news="${k}">${l}</button>`).join("")}</div>
-   <div class="news">${items.length?items.map(n=>`<div class="ni"><span class="nph">${esc(n.ph)}</span>${esc(n.t)}</div>`).join(""):"<p class='muted'>Nothing yet.</p>"}</div></div>`;
-  setTimeout(()=>{document.querySelectorAll("[data-news]").forEach(b=>b.onclick=()=>{ui.news=b.dataset.news;render();});const eb=$("#evbtn");if(eb)eb.onclick=showEvent;const pb=$("#ppbtn");if(pb)pb.onclick=()=>{ui.tab="office";ui.office="career";render();window.scrollTo(0,0);};},0);
+  h+=`<div class="card"><div class="ch">📰 Newswire</div><div class="chips">${[["mine","My program"],["feed","📱 Feed"],["rec","Recruiting"],["games","Games"],["coach","Carousel/Portal"],["all","All"]].map(([k,l])=>`<button class="cp ${f===k?"on":""}" data-news="${k}">${l}</button>`).join("")}</div>
+   <div class="news">${f==="feed"?((S.feed||[]).slice(0,60).map(x=>`<div class="ni fd" data-rid="${x.rid}"><span class="nph">${esc(x.ph)} · ${x.st}★ ${esc(x.n)}</span>${esc(x.t)}</div>`).join("")||"<p class='muted'>Quiet on social media.</p>"):items.length?items.map(n=>`<div class="ni"><span class="nph">${esc(n.ph)}</span>${esc(n.t)}</div>`).join(""):"<p class='muted'>Nothing yet.</p>"}</div></div>`;
+  setTimeout(()=>{document.querySelectorAll("[data-news]").forEach(b=>b.onclick=()=>{ui.news=b.dataset.news;render();});const eb=$("#evbtn");if(eb)eb.onclick=showEvent;const pb=$("#ppbtn");if(pb)pb.onclick=()=>{ui.tab="office";ui.office="career";render();window.scrollTo(0,0);};
+    document.querySelectorAll("[data-camp]").forEach(b=>b.onclick=()=>{const res=attendCamp(+b.dataset.camp);save();render();toast(res.msg,!res.ok);});
+    const hc=$("#hostcamp");if(hc)hc.onclick=()=>{const res=hostCamp();save();render();toast(res.msg,!res.ok);};
+    const as=$("#asscout");if(as)as.onclick=()=>{const res=scoutAllStar();save();render();toast(res.msg,!res.ok);};
+    document.querySelectorAll(".fd[data-rid]").forEach(e=>e.onclick=()=>openRecruit(e.dataset.rid));},0);
   return h;
 }
 
@@ -199,7 +209,7 @@ function recRow(r,compact){
   const sc=r.sc>0?`<i class="scb" style="width:${r.sc}%"></i>`:"";
   const sv=r.sc>=50?scoutView(r):null;const gem=sv&&sv.gem?"💎":sv&&sv.bust?"⚠️":"";
   const left=r.portal?`<div class="rk">${r.tOvr>=0&&r.sc>=40?r.tOvr:"~"+(Math.round(r.tOvr/3)*3)}<small>OVR</small></div>`:`<div class="rk">${r.rank}<small>${r.stars}★</small></div>`;
-  const sub=r.portal?`${r.pos} · ex-${esc(T(r.from)?T(r.from).abbr:"?")} · ${r.yrs}yr · ask ${money(r.nil)}`:`${r.pos} · ${esc(r.city)}, ${r.st}${r.tag==="lb"&&r.sc>=90?" · 📈":""}`;
+  const sub=r.portal?`${r.pos} · ex-${esc(T(r.from)?T(r.from).abbr:"?")} · ${r.yrs}yr · ask ${money(r.nil)}`:`${r.cls!==S.classYear?"<b>"+clsLabel(r)+"</b> · ":""}${r.pos} · ${esc(r.city)}, ${r.st}${r.tag==="lb"&&r.sc>=90?" · 📈":""}`;
   return `<div class="rrow" data-rid="${r.id}">${r.portal?"":`<span class="star ${tg?"on":""}" data-tg="${r.id}">${tg?"★":"☆"}</span>`}${left}
    <div class="rmid"><div class="rn">${gem}${esc(rName(r))} ${r.portal?stars(r.stars):""}<span class="tic">${isPipe(r)?"🔗":""}${gpaVis(r)&&admitIssue(r,U().teamId)?"🎓⚠️":""}${trIcons(r)}</span>${r.flag==="up"?' <span class="up">▲</span>':r.flag==="down"?' <span class="down">▼</span>':""}</div><div class="rs">${sub}</div><div class="scw">${sc}</div></div>
    <div class="rright"><div class="tops">${ts.map(x=>badge(x.id)).join("")}</div>${status}</div></div>`;
@@ -207,7 +217,7 @@ function recRow(r,compact){
 function portalStanding(r){const uid=U().teamId;const ts=topSchools(r,10);const i=ts.findIndex(x=>x.id===uid);if(i<0)return {i:-1,label:r.off.includes(uid)?"—":"Not offered",p:0};return {i,p:ts[i].p,label:i===0?"Leader":i<3?"Top 3":"In it"};}
 function boardList(){
   const b=ui.board;const uid=U().teamId;const t=UT();
-  let list=S.portalOpen?S.portal.slice():S.recruits.slice();
+  let list=S.portalOpen?S.portal.slice():S.recruits.filter(r=>b.cls==="all"||r.cls===S.classYear+b.cls);
   const q=b.q.trim().toLowerCase();
   list=list.filter(r=>{
     if(q&&!(rName(r).toLowerCase().includes(q)||r.city.toLowerCase().includes(q)||r.st.toLowerCase()===q||(r.hs&&hsById(r.hs)&&hsById(r.hs).name.toLowerCase().includes(q))))return false;
@@ -236,13 +246,14 @@ function vBoard(){
   const list=boardList();
   const sts=P?[["open","Available"],["targets","My offers"],["all","All"],["mine","Signed"]]:[["targets","★ Priority"],["fit","Best fits"],["pipe","🔗 Pipelines"],["offered","Offered"],["open","Uncommitted"],["gems","💎 Gems"],["mine","Committed"],["all","All"]];
   let h=`<div class="card filt">${P?`<div class="ptl">🌀 <b>Transfer Portal</b> — ${S.portal.filter(r=>!r.com).length} available. They commit within days; NIL talks loudest here.</div>`:""}
-   <input id="bq" placeholder="Search name, city, or state (TX)…" value="${esc(b.q)}">
+   ${P?"":`<div class="chips seg">${[[0,"Class of "+S.classYear+" (Sr)"],[1,(S.classYear+1)+" (Jr)"],[2,(S.classYear+2)+" (So)"],["all","All"]].map(([k,l])=>`<button class="cp ${b.cls===k?"on":""}" data-bcls="${k}">${l}</button>`).join("")}</div>`}
+   <input id="bq" placeholder="Search name, city, state (TX) or high school…" value="${esc(b.q)}">
    <div class="chips">${sts.map(([k,l])=>`<button class="cp ${b.st===k?"on":""}" data-bst="${k}">${l}</button>`).join("")}</div>
    <div class="sels"><select id="bpos"><option value="ALL">All pos</option>${POSITIONS.map(p=>`<option ${b.pos===p?"selected":""}>${p}</option>`).join("")}</select>
    <select id="bstar"><option value="0">All ★</option>${[5,4,3,2].map(n=>`<option value="${n}" ${b.stars===n?"selected":""}>${n}★</option>`).join("")}</select>
    <select id="breg"><option value="all">Nationwide</option><option value="near" ${b.reg==="near"?"selected":""}>≤500 mi</option><option value="state" ${b.reg==="state"?"selected":""}>In-state</option></select>
    <select id="bsort"><option value="rank">Sort: ${P?"OVR":"Rank"}</option><option value="int" ${b.sort==="int"?"selected":""}>My interest</option><option value="sc" ${b.sort==="sc"?"selected":""}>Scouted</option><option value="near" ${b.sort==="near"?"selected":""}>Distance</option></select></div></div>`;
-  h+=`<div class="muted small pad">${list.length} players${!P&&b.st==="targets"?` · Priority targets get full-time staff attention every week`:""}</div>`;
+  h+=`<div class="muted small pad">${list.length} players${!P&&b.st==="targets"?` · Priority targets get full-time staff attention every week`:""}${!P&&b.cls!==0&&b.cls!=="all"?` · Underclassmen decide as seniors, but early offers build relationships that carry over`:""}</div>`;
   h+=`<div class="list">${list.slice(0,b.n).map(r=>recRow(r)).join("")||(P?"<p class='muted pad'>Nobody here. Try “Available”.</p>":"<p class='muted pad'>Nobody here yet. Try “Best fits” and tap ☆ to add priority targets.</p>")}</div>`;
   if(list.length>b.n)h+=`<button class="btn wide" id="bmore">Show more (${list.length-b.n})</button>`;
   return h;
@@ -250,6 +261,7 @@ function vBoard(){
 function bindBoard(){
   const b=ui.board;
   document.querySelectorAll("[data-bst]").forEach(e=>e.onclick=()=>{b.st=e.dataset.bst;b.n=40;render();});
+  document.querySelectorAll("[data-bcls]").forEach(e=>e.onclick=()=>{const v=e.dataset.bcls;b.cls=v==="all"?"all":+v;b.n=40;render();});
   $("#bpos").onchange=e=>{b.pos=e.target.value;b.n=40;render();};
   $("#bstar").onchange=e=>{b.stars=+e.target.value;b.n=40;render();};
   $("#breg").onchange=e=>{b.reg=e.target.value;render();};
@@ -265,7 +277,7 @@ function recruitHTML(r){
   const uid=U().teamId;const t=UT();const sv=scoutView(r);const P=!!r.portal;
   let h=`<div class="rh"><div><h2>${esc(rName(r))}</h2><div class="rsub">${r.pos} · ${stars(r.stars)} ${P?`· Transfer from ${tname(r.from)} · ${r.yrs} yr${r.yrs>1?"s":""} left`:`· Composite #${r.rank} · #${r.pr} ${r.pos} · ${r.comp.toFixed(4)}`}</div>
     ${P?"":`<div class="svc"><span><b>${SERVICES.A}</b> ${stars(r.stA||r.stars)} #${r.rkA||"—"}</span><span><b>${SERVICES.B}</b> ${stars(r.stB||r.stars)} #${r.rkB||"—"}</span></div>`}
-    <div class="rsub">${P?"":esc(r.city)+", "+r.st+" · Class of "+r.cls+" · "}${htStr(r.ht)}, ${r.wt} lbs · ${r.forty}s 40</div></div>
+    <div class="rsub">${P?"":esc(r.city)+", "+r.st+" · Class of "+r.cls+" ("+clsLabel(r)+") · "}${htStr(r.ht)}, ${r.wt} lbs · ${r.forty}s 40${r.fortyV?" ✅ verified":""}</div></div>
     ${P?"":`<span class="star big ${S.user.targets[r.id]?"on":""}" data-tg="${r.id}">${S.user.targets[r.id]?"★":"☆"}</span>`}</div>`;
   // status
   let st="";
@@ -274,6 +286,7 @@ function recruitHTML(r){
   h+=`<div class="rstatus">${st}</div>`;
   if(!P){const hs=hsById(r.hs);const ph=pipeHS(r),ps=pipeSt(r);const ai=admitIssue(r,U().teamId);
     h+=`<div class="rinfo">${hs?`🏫 <b>${esc(hs.name)}</b> · Coach ${esc(hs.coach)}<br>🔗 School pipeline: <b>${pipeLabel(ph)}</b>${ph?" ("+Math.round(ph)+")":""} · ${esc(STATE_NAMES[r.st]||r.st)}: <b>${pipeLabel(ps)}</b>${ps?" ("+Math.round(ps)+")":""}${ph>=20||ps>=40?` · <span class="up">+${Math.round((pipeMult(r)-1)*100)}% recruiting pull</span>`:""}<br>`:""}
+     ${r.han?(r.hanK?`🕴️ Handler: <b>${esc(r.han.n)}</b> (his ${esc(r.han.k)}) — expect NIL demands<br>`:""):""}${r.par&&r.parK?`👪 ${esc(PARENT_KINDS[r.par])}<br>`:""}
      🎓 ${gpaVis(r)?`GPA <b>${r.gpa.toFixed(2)}</b> · ${ai?`<span class="down">⚠️ ${esc(ai)} — needs a waiver (${waiversLeft()} left)</span>`:`<span class="up">Meets your ${U().ad.tier} standard</span>`}`:`Transcript unknown — scout him or call to find out`}</div>`;}
   // scouting
   h+=`<div class="card in"><div class="ch">🔎 Scouting report <span class="muted small">${r.sc}% complete</span></div><div class="scbar"><i style="width:${r.sc}%"></i></div>
@@ -294,20 +307,23 @@ function recruitHTML(r){
   // actions
   const canAct=!(r.signed&&r.com!==uid)&&!(r.com===uid&&r.signed);
   if(canAct){
-    const H=U().hours;const dis=x=>H<x?"disabled":"";
+    const H=U().hours;const dis=x=>H<x?"disabled":"";const dead=isDead()?"disabled":"";const sr=!P&&r.cls===S.classYear;
     h+=`<div class="card in"><div class="ch">🎬 Actions <span class="muted small">⏱ ${H}h left · 🧢 ${U().hc} HC</span></div><div class="acts">
      ${r.off.includes(uid)?"":`<button class="btn pri" data-a="offer">📨 Offer<small>free</small></button>`}
      <button class="btn" data-a="film" ${dis(actCost("film"))}>🎞️ Film<small>${actCost("film")}h · scout</small></button>
      <button class="btn" data-a="eval" ${dis(5)}>👀 Eval<small>5h · scout++</small></button>
      <button class="btn" data-a="call" ${dis(1)}>📞 Call<small>1h</small></button>
      <button class="btn" data-a="pitch" ${dis(2)}>🎤 Pitch<small>2h</small></button>
-     <button class="btn" data-a="visit" ${dis(5)}>🚗 Visit<small>5h</small></button>
-     <button class="btn" data-a="hc" ${U().hc?"":"disabled"}>🧢 HC visit<small>${esc(t.coach.name.split(" ").pop())}</small></button>
-     ${P?"":`<button class="btn" data-a="ov" ${dis(3)}>🏟️ Official visit<small>3h · ${r.ovDone.length}/5 used</small></button>`}
-     <button class="btn" data-a="nil">💰 NIL offer<small>${money(budgetLeft())} free</small></button></div>
+     <button class="btn" data-a="visit" ${dis(5)||dead}>🚗 Visit<small>5h · ${(()=>{const b=bestAsst(r);return b?esc(b.s.name.split(" ").pop())+(b.s.terr.includes(r.st)?" 🗺️":""):"staff busy";})()}</small></button>
+     <button class="btn" data-a="hc" ${U().hc&&!dead?"":"disabled"}>🧢 HC visit<small>${esc(t.coach.name.split(" ").pop())}</small></button>
+     ${P?"":sr?`<button class="btn" data-a="ov" ${dis(3)||dead}>🏟️ Official visit<small>3h · ${r.ovDone.length}/5 used</small></button>`:`<button class="btn" data-a="uv" ${dis(2)||dead}>🏫 Unofficial visit<small>2h · campus trip</small></button>`}
+     ${P||sr?`<button class="btn" data-a="nil">💰 NIL offer<small>${money(budgetLeft())} free</small></button>`:""}</div>
+     ${dead?`<div class="small muted" style="margin-top:6px">🔕 Dead period — in-person contact is off limits this week.</div>`:""}${!P&&!sr?`<div class="small muted" style="margin-top:6px">Underclassman: OVs and NIL talks open his senior year. Early relationships carry over.</div>`:""}
      <div id="subact"></div></div>`;
   }
   if(r.ov.length)h+=`<div class="small pad">🏟️ Official visit booked: ${r.ov.map(k=>k.startsWith("w")?"Week "+k.slice(1):S.cal.find(c=>c.key===k).label).join(", ")}</div>`;
+  const posts=(S.feed||[]).filter(x=>x.rid===r.id).slice(0,5);
+  if(posts.length)h+=`<div class="card in"><div class="ch">📱 His feed</div>${posts.map(x=>`<div class="lg">${esc(x.t)} <span class="muted small">· ${esc(x.ph)}</span></div>`).join("")}</div>`;
   if(r.log.length)h+=`<div class="card in"><div class="ch">🗒️ Contact log</div>${r.log.map(l=>`<div class="lg">${esc(l)}</div>`).join("")}</div>`;
   return h;
 }
@@ -333,11 +349,13 @@ function bindRecruit(r){
 // ---------- CLASS ----------
 function vClass(){
   const uid=U().teamId;const t=UT();const cr=classRankings();const rk=cr.findIndex(x=>x.id===uid)+1;const me=cr[rk-1];
-  const mine=S.recruits.filter(r=>r.com===uid).sort((a,b)=>b.comp-a.comp);
+  const mine=S.recruits.filter(r=>r.com===uid&&r.cls===S.classYear).sort((a,b)=>b.comp-a.comp);
+  const fut=S.recruits.filter(r=>r.com===uid&&r.cls>S.classYear).sort((a,b)=>a.cls-b.cls||b.comp-a.comp);
   let h=`<div class="chips pad">${[["mine","My class"],["nat","Team rankings"],["top","Top 300"],["needs","Needs"],["hist","History"]].map(([k,l])=>`<button class="cp ${ui.cls===k?"on":""}" data-cls="${k}">${l}</button>`).join("")}</div>`;
   if(ui.cls==="mine"){
     h+=`<div class="card hero" style="--c1:${t.c1}"><div class="k">Class of ${S.classYear}</div><div class="hl">#${rk} nationally · ${me.pts} pts</div><p>${me.n} commits · ${me.s5}× 5★ · ${me.s4}× 4★ · ${me.s3}× 3★ · avg ${me.avg?me.avg.toFixed(4):"—"} · NIL committed ${money(pendingNIL())}</p></div>`;
     h+=`<div class="list">${mine.map(r=>recRow(r)).join("")||"<p class='muted pad'>No commits yet.</p>"}</div>`;
+    if(fut.length)h+=`<div class="card"><div class="ch">🔮 Future commits (early pledges)</div><div class="list">${fut.map(r=>recRow(r)).join("")}</div><div class="small muted">Underclassmen who've committed early. Keep recruiting them — they can still flip before they sign as seniors.</div></div>`;
     if(S.portalHist&&S.portalHist.length)h+=`<div class="card"><div class="ch">🌀 Last portal haul</div>${S.portalHist.map(p=>`<div class="lg">${p.pos} ${esc(p.n)} · ${p.ovr} OVR · from ${esc(T(p.from)?T(p.from).school:"")}</div>`).join("")}</div>`;
   }
   if(ui.cls==="nat"){
@@ -345,8 +363,8 @@ function vClass(){
   }
   if(ui.cls==="top"){
     const sv=ui.svc||"C";const key=sv==="A"?"rkA":sv==="B"?"rkB":"rank";const sk=sv==="A"?"stA":sv==="B"?"stB":"stars";
-    const list=S.recruits.slice().sort((a,b)=>a[key]-b[key]).slice(0,300);
-    h+=`<div class="chips">${[["C","Composite"],["A",SERVICES.A],["B",SERVICES.B]].map(([k,l])=>`<button class="cp ${sv===k?"on":""}" data-svc="${k}">${l}</button>`).join("")}</div>
+    const tc=ui.tcls||0;const list=S.recruits.filter(r=>r.cls===S.classYear+tc).sort((a,b)=>a[key]-b[key]).slice(0,300);
+    h+=`<div class="chips">${[0,1,2].map(k=>`<button class="cp ${tc===k?"on":""}" data-tcls="${k}">${S.classYear+k} ${["Sr","Jr","So"][k]}</button>`).join("")}</div><div class="chips">${[["C","Composite"],["A",SERVICES.A],["B",SERVICES.B]].map(([k,l])=>`<button class="cp ${sv===k?"on":""}" data-svc="${k}">${l}</button>`).join("")}</div>
      <div class="card small muted">Two independent services rank every prospect. They see the same camps and highlight tape, so they share blind spots — and both miss late bloomers. The composite averages them. Roughly half of five-stars become elite players; plenty of future stars are hiding at 4★ and 3★.</div>
      <div class="card"><table class="tbl t300"><tr><th>#</th><th>Player</th><th>★</th><th>Other</th><th></th></tr>${list.map(r=>{const other=sv==="A"?"BCI "+r.rkB:sv==="B"?"PG "+r.rkA:"PG "+r.rkA+"·BCI "+r.rkB;return `<tr data-rid="${r.id}" class="${r.com===uid?"me":""}"><td>${r[key]}</td><td><b>${esc(rName(r))}</b><div class="small muted">${r.pos} · ${esc(r.city)}, ${r.st}</div></td><td>${r[sk]}</td><td class="small muted">${other}</td><td>${r.com?badge(r.com):""}</td></tr>`;}).join("")}</table></div>`;
   }
@@ -359,7 +377,7 @@ function vClass(){
     const c=U().career;h+=`<div class="card"><div class="ch">Your classes</div>${c.length?`<table class="tbl"><tr><th>Class</th><th>School</th><th>Rk</th><th>Signees</th><th>5★/4★</th><th>Goals</th></tr>${c.map(x=>`<tr><td>${x.y}</td><td>${badge(x.team)}</td><td>#${x.rank}</td><td>${x.n}</td><td>${x.s5}/${x.s4}</td><td>${x.met}/4</td></tr>`).join("")}</table>`:"<p class='muted'>Your first class signs in February.</p>"}</div>`;
     Object.keys(S.classHist).sort().reverse().forEach(y=>{h+=`<div class="card"><div class="ch">Class of ${y} — final top 10</div>${S.classHist[y].slice(0,10).map((c,i)=>`<div class="lg">${i+1}. ${badge(c.id)} ${esc(T(c.id).school)} — ${c.pts} pts (${c.s5}× 5★, ${c.s4}× 4★)</div>`).join("")}</div>`;});
   }
-  setTimeout(()=>{document.querySelectorAll("[data-cls]").forEach(b=>b.onclick=()=>{ui.cls=b.dataset.cls;render();});document.querySelectorAll("[data-svc]").forEach(b=>b.onclick=()=>{ui.svc=b.dataset.svc;render();});},0);
+  setTimeout(()=>{document.querySelectorAll("[data-cls]").forEach(b=>b.onclick=()=>{ui.cls=b.dataset.cls;render();});document.querySelectorAll("[data-svc]").forEach(b=>b.onclick=()=>{ui.svc=b.dataset.svc;render();});document.querySelectorAll("[data-tcls]").forEach(b=>b.onclick=()=>{ui.tcls=+b.dataset.tcls;render();});},0);
   return h;
 }
 
@@ -370,7 +388,7 @@ function vTeam(){
     h+=`<div class="card hero" style="--c1:${t.c1}"><div class="k">${esc(t.school)} ${esc(t.mascot)}</div><div class="hl">Team OVR ${teamOVR(S.roster)}</div><p>Roster ${S.roster.length}/105 · Payroll ${money(payroll())} of ${money(budgetTotal())} · Recruit/portal NIL committed ${money(pendingNIL())}</p></div>`;
     if(S.retention&&S.retention.length){h+=`<div class="card warn"><div class="ch">⚠️ Portal risk — retention decisions</div>${S.retention.map(x=>{const p=S.roster.find(q=>q.id===x.pid);if(!p)return "";return `<div class="ret"><span><b>${p.pos} ${esc(p.fn+" "+p.ln)}</b> · ${p.ovr} OVR · ${yrLabel(p.yr)} · now ${money(p.nil)}</span><span><button class="btn sm pri" data-keep="${p.id}">Keep (${money(x.ask)})</button><button class="btn sm" data-let="${p.id}">Let go</button></span></div>`;}).join("")}<div class="small muted">Unresolved players enter the portal when the window closes.</div></div>`;}
     POSITIONS.forEach(pos=>{const d=depth(pos);const n=POS_STARTERS[pos];
-      h+=`<div class="card"><div class="ch">${pos} <span class="muted small">${d.length} players · starters ${n}</span></div>${d.map((p,i)=>`<div class="pl ${i<n?"stt":""}" data-pid="${p.id}"><span class="po">${i<n?"●":""}</span><span class="pn">${esc(p.fn+" "+p.ln)} ${p.from==="Portal"?"🌀":p.from==="Walk-on"?"🚶":""}${p.susp?"⛔":""}<span class="tic">${trIcons(p)}</span></span><span class="py">${yrLabel(p.yr)}</span><span class="pov">${p.ovr}${p.ovr0&&p.ovr>p.ovr0?`<sup class="up">+${p.ovr-p.ovr0}</sup>`:""}</span><span class="pp">${letter(p.pot)}</span><span class="pnil">${p.nil?money(p.nil):"—"}</span></div>`).join("")}</div>`;});
+      h+=`<div class="card"><div class="ch">${pos} <span class="muted small">${d.length} players · starters ${n}</span></div>${d.map((p,i)=>`<div class="pl ${i<n?"stt":""}" data-pid="${p.id}"><span class="po">${i<n?"●":""}</span><span class="pn">${esc(p.fn+" "+p.ln)} ${p.from==="Portal"?"🌀":p.from==="Walk-on"?"🚶":""}${p.susp?"⛔":""}${p.inj>0?`<span class="down"> 🩹${p.inj>=12?"OUT":p.inj+"w"}</span>`:""}<span class="tic">${trIcons(p)}</span>${p.s&&p.s.g&&i<n?`<span class="pst">${esc(pStatLine(p))}</span>`:""}</span><span class="py">${yrLabel(p.yr)}</span><span class="pov">${p.ovr}${p.ovr0&&p.ovr>p.ovr0?`<sup class="up">+${p.ovr-p.ovr0}</sup>`:""}</span><span class="pp">${letter(p.pot)}</span><span class="pnil">${p.nil?money(p.nil):"—"}</span></div>`).join("")}</div>`;});
   }
   if(ui.team==="prog"){
     const ps=S.roster.filter(p=>p.ovr0).map(p=>({p,g:p.ovr-p.ovr0})).sort((a,b)=>b.g-a.g);
@@ -407,10 +425,17 @@ function vTeam(){
     h+=`<div class="card"><div class="ch">Head Coach</div><div class="coach"><b>${esc(c.name)}</b><span class="muted small">${c.real?"":"(new hire)"} · ${hot}</span>
       <div class="grid3"><div class="stat"><b>${c.rec}</b><span>Recruiting</span></div><div class="stat"><b>${c.dev}</b><span>Development</span></div><div class="stat"><b>${c.game}</b><span>Game day</span></div></div></div>
       <div class="small muted">Recruiting powers HC visits and "Head Coach" pitches. Development grows your signees and sells "NFL Development". Game day wins games — and wins sell everything.</div></div>`;
+    const st=U().staff||[];
+    h+=`<div class="card"><div class="ch">👥 Assistant coaches <span class="muted small">payroll ${money(staffPayroll())} of ${money(staffBudget())}</span></div>
+     <p class="small muted">Assistants do your assistant visits (2 each per week) — best when the kid is in their 🗺️ territory or plays the position they coach. Their territories boost your pipelines; position coaches drive development; coordinators set your scheme and call the games. Staff changes happen in the offseason.</p>
+     ${STAFF_ROLES.map((r,i)=>{const a=st[i];if(!a){const cs=hireCandidates(i);return `<div class="asst empty"><div class="ch">${r.n} <span class="down small">OPEN</span></div>${cs.map(c=>`<div class="cand"><div><b>${esc(c.name)}</b>${c.style?` <span class="small muted">${esc(c.style)}</span>`:""}<div class="small muted">REC ${c.rec} · DEV ${c.dev} · SCH ${c.sch} · 🗺️ ${c.terr.join("/")}${c.pos&&c.pos.length?" · coaches "+c.pos.join("/"):""}</div></div><button class="btn sm pri" data-hire="${i}:${c.id}">Hire ${money(c.sal)}</button></div>`).join("")}</div>`;}
+       return `<div class="asst"><div class="ch">${r.n}</div><div class="cand"><div><b>${esc(a.name)}</b>${a.style?` <span class="small muted">${esc(a.style)}</span>`:""} <span class="small muted">· yr ${a.yrs+1}</span><div class="small muted">REC ${a.rec} · DEV ${a.dev} · SCH ${a.sch} · 🗺️ ${a.terr.map(s=>STATE_NAMES[s]||s).join(", ")}${a.pos&&a.pos.length?" · coaches "+a.pos.join("/"):""} · ${money(a.sal)}/yr</div></div>${canFire()?`<button class="btn sm danger" data-fire="${i}">Fire</button>`:""}</div></div>`;}).join("")}</div>`;
     h+=upgradesHTML();
   }
   setTimeout(()=>{document.querySelectorAll("[data-tm]").forEach(b=>b.onclick=()=>{ui.team=b.dataset.tm;render();});
     document.querySelectorAll("[data-pid]").forEach(e=>e.onclick=()=>openPlayer(+e.dataset.pid));
+    document.querySelectorAll("[data-hire]").forEach(b=>b.onclick=()=>{const [i,c]=b.dataset.hire.split(":").map(Number);const res=hireAssistant(i,c);save();render();toast(res.msg,!res.ok);});
+    document.querySelectorAll("[data-fire]").forEach(b=>b.onclick=()=>{if(!b.dataset.arm){b.dataset.arm=1;b.textContent="Confirm";return;}const res=fireAssistant(+b.dataset.fire);save();render();if(res.msg)toast(res.msg,!res.ok);});
     document.querySelectorAll("[data-keep]").forEach(b=>b.onclick=()=>{const res=resolveRetention(+b.dataset.keep,true);if(res&&!res.ok)toast(res.msg,true);save();render();});
     document.querySelectorAll("[data-let]").forEach(b=>b.onclick=()=>{resolveRetention(+b.dataset.let,false);save();render();});
     bindUpgrades();},0);
@@ -426,7 +451,7 @@ function bindUpgrades(){document.querySelectorAll("[data-up]").forEach(b=>b.oncl
 
 // ---------- POLLS ----------
 function vPolls(){
-  const tabs=[["ap","AP Top 25"],["cfp","CFP Rankings"],["stand","Standings"],["scores","Scores"],["bracket","Playoff"]];
+  const tabs=[["ap","AP Top 25"],["cfp","CFP Rankings"],["stand","Standings"],["scores","Scores"],["bracket","Playoff"],["heis","Heisman"],["aa","All-Americans"]];
   let h=`<div class="chips pad">${tabs.map(([k,l])=>`<button class="cp ${ui.poll===k?"on":""}" data-pl="${k}">${l}</button>`).join("")}</div>`;
   const uid=U().teamId;
   if(ui.poll==="ap"||ui.poll==="cfp"){
@@ -436,6 +461,16 @@ function vPolls(){
     h+=`<div class="card"><table class="tbl poll"><tr><th>#</th><th>Team</th><th>Rec</th><th>Δ</th><th>Conf</th></tr>${list.map((id,i)=>{const t=T(id);const pi=prev.indexOf(id);const d=pi<0?"NEW":pi-i;
       return `<tr class="${id===uid?"me":""}"><td>${i+1}</td><td>${badge(id)} ${tname(id)}${t.champ?" 🏆":""}</td><td>${t.w}-${t.l}</td><td class="${d==="NEW"||d>0?"up":d<0?"down":""}">${d==="NEW"?"NEW":d>0?"▲"+d:d<0?"▼"+(-d):"—"}</td><td class="small">${t.conf}</td></tr>`;}).join("")}</table>
      ${!list.includes(uid)?`<div class="small pad">${esc(UT().school)}: ${UT().w}-${UT().l}, unranked</div>`:""}</div>`;
+  }
+  if(ui.poll==="heis"){
+    const won=(S.awards||[]).filter(a=>a.k==="heisman");const cur=won.find(a=>a.y===S.year);
+    if(cur)h+=`<div class="card hero" style="--c1:${T(cur.id).c1}"><div class="k">${cur.y} Heisman Trophy</div><div class="hl">${cur.pos} ${esc(cur.n)} · ${esc(T(cur.id).school)}</div><p>${esc(cur.line)}</p></div>`;
+    h+=`<div class="card"><div class="ch">🏆 Heisman watch</div>${(S.heisman||[]).length?S.heisman.map((x,i)=>`<div class="pl2 ${x.id===uid?"me":""}"><span>${i+1}. <b>${esc(x.n)}</b> ${x.pos} · ${badge(x.id)}<br><span class="small muted">${esc(x.line)}</span></span><b>${x.v}</b></div>`).join(""):"<p class='muted small'>The race starts once games are played.</p>"}</div>`;
+    if(won.length)h+=`<div class="card"><div class="ch">Past winners</div>${won.slice().reverse().map(a=>`<div class="lg">${a.y}: ${a.pos} ${esc(a.n)} · ${esc(T(a.id).school)}${a.mine?" · <b>signed by you</b>":""}</div>`).join("")}</div>`;
+  }
+  if(ui.poll==="aa"){
+    if(!S.aa)h+=`<div class="card"><p class="muted">The All-America team is announced after the regular season.</p></div>`;
+    else h+=`<div class="card"><div class="ch">🎖️ ${S.aa.y} All-America first team</div>${S.aa.team.map(x=>`<div class="pl2 ${x.id===uid?"me":""}"><span><b>${x.pos}</b> ${esc(x.n)} · ${badge(x.id)}${x.mine?" ⭐":""}<br><span class="small muted">${esc(x.line)}</span></span></div>`).join("")}<div class="small muted">⭐ = a player you signed.</div></div>`;
   }
   if(ui.poll==="stand"){
     h+=`<div class="sels pad"><select id="confsel">${Object.keys(CONF_GAMES).concat(["Independent"]).map(c=>`<option ${ui.conf===c?"selected":""}>${c}</option>`).join("")}</select></div>`;
@@ -471,7 +506,7 @@ function scoreRow(g,lbl){
 // ---------- OFFICE ----------
 function vOffice(){
   const u=U();const t=UT();
-  let h=`<div class="chips pad">${[["dir","Director"],["career","Career & Perks"],["admin","Administration"],["pipe","Pipelines"],["coach","Coach editor"],["save","Save"],["help","How to play"]].map(([k,l])=>`<button class="cp ${ui.office===k?"on":""}" data-of="${k}">${l}</button>`).join("")}</div>`;
+  let h=`<div class="chips pad">${[["dir","Director"],["career","Career & Perks"],["legacy","Legacy"],["admin","Administration"],["pipe","Pipelines"],["coach","Coach editor"],["save","Saves"],["help","How to play"]].map(([k,l])=>`<button class="cp ${ui.office===k?"on":""}" data-of="${k}">${l}</button>`).join("")}</div>`;
   if(ui.office==="dir"){
     h+=`<div class="card hero" style="--c1:${t.c1}"><div class="k">Director of Recruiting</div><div class="hl">${esc(u.name)} · ${esc(t.school)}</div><p>Year ${u.yearsAt+1} at ${esc(t.school)} · Difficulty: ${u.diff}</p></div>
      <div class="card"><div class="meter"><span>Reputation</span><b>${Math.round(u.rep)}</b><i><em style="width:${u.rep}%"></em></i></div><div class="meter"><span>Job security</span><b>${Math.round(u.sec)}</b><i><em style="width:${u.sec}%;background:${u.sec<30?"#e5484d":"#3fb950"}"></em></i></div>
@@ -514,8 +549,28 @@ function vOffice(){
      <select id="cet">${S.teamIds.map(id=>`<option value="${id}" ${id===(ui.ce||U().teamId)?"selected":""}>${esc(T(id).school)} — ${esc(T(id).coach.name)}</option>`).join("")}</select>
      ${(()=>{const c=T(ui.ce||U().teamId).coach;return `<div class="col"><label>Name<input id="cen" value="${esc(c.name)}"></label><div class="row"><label>REC<input id="cer" type="number" value="${c.rec}"></label><label>DEV<input id="ced" type="number" value="${c.dev}"></label><label>GAME<input id="ceg" type="number" value="${c.game}"></label></div><button class="btn pri" id="cesave">Save coach</button></div>`;})()}</div>`;
   }
+  if(ui.office==="legacy"){
+    const L=leg();const rc=records();const sc=hofScore();
+    h+=`<div class="card hero" style="--c1:${t.c1}"><div class="k">Career legacy</div><div class="hl">${esc(u.name)} · ${esc(dirTitle(u.lvl))}</div><p>${rc.seasons} class${rc.seasons===1?"":"es"} signed · Stops: ${L.teams.map(id=>esc(T(id).abbr)).join(" → ")} · Hall of Fame score <b>${sc}</b> (120 to get in)</p></div>
+     <div class="card"><div class="ch">🏆 Trophy case</div><div class="grid4"><div class="stat"><b>${L.nat}</b><span>Natl titles</span></div><div class="stat"><b>${L.conf}</b><span>Conf titles</span></div><div class="stat"><b>${L.cfp}</b><span>CFP trips</span></div><div class="stat"><b>${L.roty}</b><span>Recruiter of Yr</span></div></div>
+     <div class="grid4"><div class="stat"><b>${L.top1}</b><span>#1 classes</span></div><div class="stat"><b>${L.top10}</b><span>Top-10 classes</span></div><div class="stat"><b>${L.drafted.length}</b><span>Signees drafted</span></div><div class="stat"><b>${L.heis.length}</b><span>Heisman signees</span></div></div>
+     ${L.tro.length?L.tro.slice().reverse().map(x=>`<div class="lg">🏆 ${x.y} · ${esc(x.t)} · ${esc(T(x.team).school)}</div>`).join(""):"<p class='muted small'>No hardware yet.</p>"}</div>
+     <div class="card"><div class="ch">📖 Record book</div>
+      <div class="goal"><span>Best class</span><b>${rc.best?`#${rc.best.rank} · ${rc.best.y} ${esc(T(rc.best.team).abbr)}`:"—"}</b></div>
+      <div class="goal"><span>Most 5★ in a class</span><b>${rc.most5&&rc.most5.s5?`${rc.most5.s5} · ${rc.most5.y} ${esc(T(rc.most5.team).abbr)}`:"—"}</b></div>
+      <div class="goal"><span>Biggest gem (lowest-rated signee drafted)</span><b>${rc.gem?`${esc(rc.gem.n)} · ${rc.gem.stars}★ → Rd ${rc.gem.rd}`:"—"}</b></div>
+      <div class="goal"><span>Biggest miss (5★ who never developed)</span><b>${rc.bust?`${esc(rc.bust.n)} · peaked at ${rc.bust.ovr}`:"—"}</b></div>
+      <div class="goal"><span>First-round picks you signed</span><b>${L.drafted.filter(d=>d.rd===1).length}</b></div>
+      <div class="goal"><span>All-Americans you signed</span><b>${L.aa}</b></div></div>
+     ${L.drafted.length?`<div class="card"><div class="ch">🏈 Your signees in the NFL</div>${L.drafted.slice().reverse().slice(0,30).map(d=>`<div class="lg">${d.y} · Rd ${d.rd} · ${d.pos} ${esc(d.n)} (${d.stars}★, ${esc(T(d.team).abbr)})</div>`).join("")}</div>`:""}
+     ${L.heis.length?`<div class="card"><div class="ch">🏆 Heisman winners you signed</div>${L.heis.map(d=>`<div class="lg">${d.y} · ${d.pos} ${esc(d.n)} (${esc(T(d.team).school)})</div>`).join("")}</div>`:""}
+     <div class="card"><div class="ch">🎬 Retirement</div><p class="small muted">Hang it up and see if you make the Hall of Fame. This ends the career in this save slot.</p><button class="btn danger wide" id="retire">Retire</button></div>`;
+  }
   if(ui.office==="save"){
-    h+=`<div class="card"><div class="ch">Save</div><p class="small muted">The game autosaves to this browser after every week.</p><div class="col"><button class="btn" id="exp">⬇️ Download save file</button><button class="btn" id="cpy">📋 Copy save to clipboard</button><label class="btn">⬆️ Import save file<input id="imp" type="file" accept=".json" hidden></label><textarea id="pst" rows="3" placeholder="…or paste a save here" style="background:#0e1628;color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:10px;font-size:13px"></textarea><button class="btn" id="pstgo">Load pasted save</button><button class="btn danger" id="ngb">🗑️ Start a new career</button></div></div>`;
+    const m=getMeta();
+    h+=`<div class="card"><div class="ch">💾 Save slots</div><p class="small muted">The game autosaves (compressed) to this browser after every week.${S._saveErr?` <span class="down">Last save failed: ${esc(S._saveErr)}</span>`:""}</p>
+     ${[1,2,3].map(n=>{const s=m.slots[n];const cur=S.slot===n;return `<div class="upg"><div><b>Slot ${n}${cur?" · playing":""}</b><div class="small muted">${s?`${esc(s.name)} · ${esc(s.school)} · ${s.year} ${esc(s.ph)} · Lv ${s.lvl} · ${s.kb||"?"} KB`:"Empty"}</div></div><span class="row" style="margin:0">${s&&!cur?`<button class="btn sm" data-slotload="${n}">Load</button>`:""}${!s?`<button class="btn sm pri" data-slotnew="${n}">New</button>`:""}${s&&!cur?`<button class="btn sm danger" data-slotdel="${n}">Delete</button>`:""}</span></div>`;}).join("")}</div>
+     <div class="card"><div class="ch">Move a career between devices</div><div class="col"><button class="btn" id="exp">⬇️ Download save file</button><button class="btn" id="cpy">📋 Copy save to clipboard</button><label class="btn">⬆️ Import save file<input id="imp" type="file" accept=".json" hidden></label><textarea id="pst" rows="3" placeholder="…or paste a save here" style="background:#0e1628;color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:10px;font-size:13px"></textarea><button class="btn" id="pstgo">Load pasted save</button><button class="btn danger" id="ngb">🗑️ Delete this career & start over</button></div></div>`;
   }
   if(ui.office==="help"){
     h+=`<div class="card help"><div class="ch">How to play</div>
@@ -535,7 +590,11 @@ function vOffice(){
      <p><b>13. Build pipelines.</b> Sign a kid and you build a relationship with his high school coach and state. Pipeline schools send film and the inside scoop on future prospects, and their kids lean your way. Your pipelines follow you from job to job.</p>
      <p><b>14. Rivalries & bowls.</b> Rivalry games are wilder and matter more — for momentum, prestige, AD support, your job security, and head-to-head recruits. Bowl wins give a small offseason bump; every playoff win gives a bigger one.</p>
      <p><b>15. Rankings.</b> ${SERVICES.A} and ${SERVICES.B} rank every prospect independently; Class → Top 300 shows both. They're about as accurate as the real services: good, not gospel.</p>
-     <p><b>16. Your career.</b> Hit AD goals for upgrade points and reputation. Win big and bigger programs call. Miss too often and you're fired.</p></div>`;
+     <p><b>16. Three classes at once.</b> The board holds seniors, juniors and sophomores. Only seniors sign, take official visits or talk NIL — but early offers, unofficial visits and calls build relationships that carry over, and a few elite juniors commit early.</p>
+     <p><b>17. Your staff.</b> Five assistants each have recruiting, development and scheme ratings, a home territory and position groups. They make the assistant visits, power your pipelines, develop their positions, and set your schemes. Good ones get poached — sometimes they become head coaches and ask you to come along.</p>
+     <p><b>18. Real rosters everywhere.</b> Every program has a full roster: real transfers in the portal, real draft picks, stats, injuries, a Heisman race and an All-America team. After all signings, every roster is filled out with walk-ons.</p>
+     <p><b>19. Camps, all-stars & drama.</b> Camp season lets you scout dozens of prospects at once; testing moves rankings. All-American Bowl week brings live announcements. Watch for handlers, parents with demands, and dead periods when in-person contact is off.</p>
+     <p><b>20. Your career.</b> Hit AD goals for upgrade points and reputation. Win big and bigger programs call. Miss too often and you're fired.</p></div>`;
   }
   setTimeout(()=>{
     document.querySelectorAll("[data-of]").forEach(b=>b.onclick=()=>{ui.office=b.dataset.of;render();});bindUpgrades();
@@ -543,11 +602,15 @@ function vOffice(){
     document.querySelectorAll("[data-adr]").forEach(b=>b.onclick=()=>{const res=adRequest(b.dataset.adr);save();render();toast(res.msg,!res.ok);});
     document.querySelectorAll("[data-hsq]").forEach(b=>b.onclick=()=>{const nm=b.dataset.hsq;ui.tab="board";ui.board.st="all";ui.board.q=nm.split(" ")[0];ui.board.n=40;render();window.scrollTo(0,0);});
     const cet=$("#cet");if(cet){cet.onchange=e=>{ui.ce=e.target.value;render();};$("#cesave").onclick=()=>{const c=T(ui.ce||U().teamId).coach;c.name=$("#cen").value.trim()||c.name;c.rec=clamp(+$("#cer").value||c.rec,40,99);c.dev=clamp(+$("#ced").value||c.dev,40,99);c.game=clamp(+$("#ceg").value||c.game,40,99);save();toast("Coach saved.");render();};}
-    const ex=$("#exp");if(ex)ex.onclick=()=>{const blob=new Blob([JSON.stringify(S)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`signing-day-${UT().abbr}-${S.year}.json`;a.click();};
-    const im=$("#imp");if(im)im.onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{S=JSON.parse(rd.result);save();render();toast("Save loaded.");}catch(err){toast("Bad save file.",true);}};rd.readAsText(f);};
-    const ng=$("#ngb");if(ng)ng.onclick=()=>{if(!ng.dataset.arm){ng.dataset.arm=1;ng.textContent="Tap again to delete this career";return;}try{localStorage.removeItem(SAVE_KEY);}catch(e){}S=null;render();};
-    const cp=$("#cpy");if(cp)cp.onclick=()=>{try{navigator.clipboard.writeText(JSON.stringify(S)).then(()=>toast("Save copied."),()=>toast("Clipboard blocked here — use Download.",true));}catch(e){toast("Clipboard unavailable.",true);}};
-    const pg=$("#pstgo");if(pg)pg.onclick=()=>{try{const o=JSON.parse($("#pst").value);if(!o.teams)throw 0;S=o;save();render();toast("Save loaded.");}catch(e){toast("That doesn't look like a save.",true);}};
+    const ex=$("#exp");if(ex)ex.onclick=()=>{const blob=new Blob([serialize()],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`signing-day-${UT().abbr}-${S.year}.json`;a.click();};
+    const im=$("#imp");if(im)im.onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const o=JSON.parse(rd.result);if(o.v!==SAVE_VER)throw 0;const n=S.slot;S=o;S.slot=n;save();render();toast("Save loaded.");}catch(err){toast("Bad or outdated save file.",true);}};rd.readAsText(f);};
+    const ng=$("#ngb");if(ng)ng.onclick=()=>{if(!ng.dataset.arm){ng.dataset.arm=1;ng.textContent="Tap again to delete this career";return;}const n=S.slot;deleteSlot(n);S=null;ngSlot=n;render();};
+    document.querySelectorAll("[data-slotload]").forEach(b=>b.onclick=async()=>{b.textContent="Loading…";const ok=await loadSlot(+b.dataset.slotload);if(ok){ui.tab="home";render();toast("Career loaded.");}else toast("Couldn't load that slot.",true);});
+    document.querySelectorAll("[data-slotnew]").forEach(b=>b.onclick=()=>{save();S=null;ngSlot=+b.dataset.slotnew;render();});
+    document.querySelectorAll("[data-slotdel]").forEach(b=>b.onclick=()=>{if(!b.dataset.arm){b.dataset.arm=1;b.textContent="Sure?";return;}deleteSlot(+b.dataset.slotdel);render();});
+    const rt=$("#retire");if(rt)rt.onclick=()=>{if(!rt.dataset.arm){rt.dataset.arm=1;rt.textContent="Tap again to retire for good";return;}showRetire();};
+    const cp=$("#cpy");if(cp)cp.onclick=()=>{try{navigator.clipboard.writeText(serialize()).then(()=>toast("Save copied."),()=>toast("Clipboard blocked here — use Download.",true));}catch(e){toast("Clipboard unavailable.",true);}};
+    const pg=$("#pstgo");if(pg)pg.onclick=()=>{try{const o=JSON.parse($("#pst").value);if(!o.teams||o.v!==SAVE_VER)throw 0;const n=S.slot;S=o;S.slot=n;save();render();toast("Save loaded.");}catch(e){toast("That doesn't look like a current save.",true);}};
   },0);
   return h;
 }
@@ -560,6 +623,8 @@ function openPlayer(id){const p=S.roster.find(x=>x.id===id);if(!p)return;
   const dr=draftRound(p.ovr);
   openSheet(`<div class="rh"><div><h2>${esc(p.fn+" "+p.ln)}</h2><div class="rsub">${p.pos} · ${yrLabel(p.yr)} · ${p.from}${p.pfrom?" from "+esc(T(p.pfrom).school):""}${p.stars?" · signed as "+p.stars+"★":""}${p.hsRank?" (#"+p.hsRank+")":""}</div></div></div>
    <div class="grid4"><div class="stat"><b>${p.ovr}</b><span>OVR</span></div><div class="stat"><b>${letter(p.pot)}</b><span>Ceiling</span></div><div class="stat"><b>${Math.round(p.mor)}</b><span>Morale</span></div><div class="stat"><b>${p.nil?money(p.nil):"—"}</b><span>NIL/yr</span></div></div>
+   ${p.inj>0?`<div class="flag bust">🩹 Injured — ${p.inj>=12?"out for the season":"out "+p.inj+" more week"+(p.inj>1?"s":"")}</div>`:""}
+   <div class="card in"><div class="ch">📊 Stats</div><div class="small">This season: ${esc(pStatLine(p))}</div>${p.ls?`<div class="small muted">Last season: ${esc(pStatLine({pos:p.pos,s:p.ls}))}</div>`:""}${p.cs&&p.cs.g?`<div class="small muted">Career: ${esc(pStatLine({pos:p.pos,s:p.cs}))}</div>`:""}</div>
    <div class="card in"><div class="ch">📈 Development</div><div class="hbars">${bars}</div>${p.yr>=3&&dr?`<div class="small">NFL projection: <b>Round ${dr}</b></div>`:p.yr>=3?`<div class="small muted">Not yet on NFL radars (77+ OVR).</div>`:""}</div>
    <div class="card in"><div class="ch">🧬 Traits</div><div class="tchs">${trChips(p,true)||"<span class='muted small'>None known.</span>"}</div>${(p.tr||[]).filter(x=>x.rev).map(x=>`<div class="small muted">${TRAITS[x.k].i} ${esc(TRAITS[x.k].d)}</div>`).join("")}<div class="small muted" style="margin-top:6px">Hidden traits surface through practice reps, game snaps and spring ball.</div></div>`,"rec");}
 
@@ -567,20 +632,21 @@ function openPlayer(id){const p=S.roster.find(x=>x.id===id);if(!p)return;
 function openTeam(id){
   if(id==="FCS")return;const t=T(id);const uid=U().teamId;
   const gs=S.games.filter(g=>(g.h===id||g.a===id)).sort((a,b)=>a.wk-b.wk);
-  const commits=S.recruits.filter(r=>r.com===id).sort((a,b)=>a.rank-b.rank);
+  const commits=S.recruits.filter(r=>r.com===id).sort((a,b)=>a.cls-b.cls||a.rank-b.rank);
   const cr=classRankings();const rk=cr.findIndex(x=>x.id===id)+1;
   const c=t.coach;
   let h=`<div class="rh"><div><h2>${badge(id,true)} ${esc(t.school)} ${esc(t.mascot)}</h2><div class="rsub">${t.conf} · ${t.w}-${t.l} (${t.cw}-${t.cl})${t.apRank?" · AP #"+t.apRank:""}${S.polls.cfpLive&&t.cfpRank?" · CFP #"+t.cfpRank:""}</div></div></div>
    <div class="card in"><div class="ch">Head coach: ${esc(c.name)}</div><div class="grid3"><div class="stat"><b>${c.rec}</b><span>Recruiting</span></div><div class="stat"><b>${c.dev}</b><span>Development</span></div><div class="stat"><b>${c.game}</b><span>Game day</span></div></div>
    <div class="grid4"><div class="stat"><b>${Math.round(t.prestige)}${trend(t.prestige,t.prev&&t.prev.prestige)}</b><span>Prestige</span></div><div class="stat"><b>${Math.round(t.talent)}</b><span>Talent</span></div><div class="stat"><b>${t.nil.toFixed(1)}</b><span>NIL</span></div><div class="stat"><b>${Math.round(t.fac)}</b><span>Facilities</span></div></div>
    <div class="small muted">${t.bowl?`🏈 ${esc(t.bowl.name)} ${t.bowl.w?"W":"L"} · `:""}${momLabel(t.mom)} · ${esc(t.off)} / ${esc(t.def)} · Coach year ${(c.yrs||0)+1} · ${proScore(t).toFixed(1)} draft picks/yr</div></div>
+   <div class="card in"><div class="ch">⭐ Key players <span class="muted small">roster OVR ${teamOVR(rosterOf(id))}</span></div>${rosterOf(id).slice().sort((a,b)=>b.ovr-a.ovr).slice(0,8).map(p=>`<div class="lg">${p.pos} ${esc(p.fn+" "+p.ln)} · ${p.ovr} OVR · ${yrLabel(p.yr)}${p.inj>0?" 🩹":""}${p.s&&p.s.g?` <span class="muted">· ${esc(pStatLine(p))}</span>`:""}</div>`).join("")}</div>
    <div class="card in"><div class="ch">Schedule</div>${gs.map(g=>{const L=gameLine(g,id);return `<div class="gm"><span class="gw">${g.kind==="reg"?"Wk "+g.wk:esc(g.label||"")}</span><span class="go">${L.home?"vs":"at"} ${L.opp==="FCS"?esc(L.oname):tname(L.opp,true)}</span><span class="gr ${L.done?(L.w?"w":"l"):""}">${L.done?(L.w?"W ":"L ")+L.ms+"-"+L.os:""}</span></div>`;}).join("")}</div>
-   <div class="card in"><div class="ch">Class of ${S.classYear}: #${rk} · ${commits.length} commits</div>${commits.slice(0,25).map(r=>`<div class="lg" data-rid="${r.id}">${stars(r.stars)} #${r.rank} ${r.pos} ${esc(rName(r))}${r.signed?" ✍️":""}</div>`).join("")||"<p class='muted small'>None yet.</p>"}</div>`;
+   <div class="card in"><div class="ch">Class of ${S.classYear}: #${rk} · ${commits.filter(r=>r.cls===S.classYear).length} commits</div>${commits.slice(0,25).map(r=>`<div class="lg" data-rid="${r.id}">${stars(r.stars)} #${r.rank} ${r.pos} ${esc(rName(r))}${r.signed?" ✍️":""}</div>`).join("")||"<p class='muted small'>None yet.</p>"}</div>`;
   openSheet(h,"team");
 }
 
 // ---------- NEW GAME ----------
-let ngSel=null;
+let ngSel=null;let ngSlot=null;
 function renderNewGame(){
   document.body.classList.add("ng");$("#top").innerHTML="";$("#tabs").innerHTML="";
   const q=(window._ngq||"").toLowerCase();
@@ -588,23 +654,34 @@ function renderNewGame(){
   const byConf={};rows.forEach(r=>{(byConf[r[4]]=byConf[r[4]]||[]).push(r);});
   const lvl=r=>r[10]>=90?"Blue blood":r[10]>=75?"Power":r[10]>=58?"Solid P4":r[10]>=48?"Rebuild":"Hard mode";
   $("#view").innerHTML=`<div class="ngw"><div class="logo">SIGNING<br><span>DAY</span></div><div class="muted ctr">College Football · NIL & Portal Era · ${TEAM_ROWS.length} real programs</div>
+   ${(()=>{const m=getMeta();const sl=[1,2,3].filter(n=>m.slots[n]);return sl.length?`<div class="card"><div class="ch">Continue a career</div>${sl.map(n=>{const s=m.slots[n];return `<button class="btn wide" data-cont="${n}">Slot ${n}: ${esc(s.name)} · ${esc(s.school)} · ${s.year} · Lv ${s.lvl}</button>`;}).join("")}${ngSlot?`<p class="small muted">New career will go in slot ${ngSlot}.</p>`:sl.length>=3?`<p class="small muted">All slots full — a new career will replace slot ${m.active||1}.</p>`:""}</div>`:"";})()}
    <div class="card"><label>Your name<input id="ngname" value="${esc(window._ngn||"")}" placeholder="Director name"></label>
    <label>Difficulty<select id="ngdiff"><option value="easy">Easy — rivals recruit softer</option><option value="normal" selected>Normal</option><option value="hard">Hard — rival staffs are relentless</option></select></label></div>
    <input id="ngq" placeholder="Search school, conference, or coach…" value="${esc(window._ngq||"")}">
    ${CONFS.filter(c=>byConf[c]).map(c=>`<div class="card"><div class="ch">${c}</div>${byConf[c].map(r=>`<div class="ngt ${ngSel===r[0]?"sel":""}" data-ng="${r[0]}"><span class="bdg" style="background:${r[8]};color:${lum(r[8])>0.6?"#111":"#fff"};border-color:${r[9]}">${r[2]}</span><div class="ngi"><b>${esc(r[1])}</b><span class="small muted">HC ${esc(r[15])} · REC ${r[16]} · ${lvl(r)}</span></div><span class="ngp">${"●".repeat(Math.max(1,Math.round(r[10]/20)))}</span></div>`).join("")}</div>`).join("")}
    <div class="ngbar"><button class="btn pri wide" id="ngstart" ${ngSel?"":"disabled"}>${ngSel?"Take the job at "+esc(TEAM_ROWS.find(r=>r[0]===ngSel)[1])+" ▶":"Pick a program"}</button></div></div>`;
   document.querySelectorAll("[data-ng]").forEach(e=>e.onclick=()=>{ngSel=e.dataset.ng;window._ngn=$("#ngname").value;renderNewGame();});
+  document.querySelectorAll("[data-cont]").forEach(b=>b.onclick=async()=>{b.textContent="Loading…";if(await loadSlot(+b.dataset.cont)){ui.tab="home";render();}else toast("That save is from an older version and can't be loaded.",true);});
   let to;$("#ngq").oninput=e=>{clearTimeout(to);to=setTimeout(()=>{window._ngq=e.target.value;window._ngn=$("#ngname").value;renderNewGame();const i=$("#ngq");i.focus();i.setSelectionRange(i.value.length,i.value.length);},300);};
   $("#ngstart").onclick=()=>{const name=$("#ngname").value.trim()||"Director";const diff=$("#ngdiff").value;$("#ngstart").textContent="Building the 2026 world…";$("#ngstart").disabled=true;
-    setTimeout(()=>{newGame(ngSel,name,diff);save();ui.tab="home";render();window.scrollTo(0,0);
-      openSheet(`<h2>Welcome to ${esc(UT().school)}, ${esc(name)}.</h2><p>It's August ${S.year}. Head coach <b>${esc(UT().coach.name)}</b> hands you the board: the Class of ${S.classYear} already has <b>${S.recruits.filter(r=>r.com===U().teamId).length} commits</b>, and ${targetCount()} uncommitted targets are on your priority list.</p>
+    setTimeout(()=>{const m=getMeta();let slot=ngSlot||[1,2,3].find(n=>!m.slots[n])||m.active||1;ngSlot=null;newGame(ngSel,name,diff,slot);save();ui.tab="home";render();window.scrollTo(0,0);
+      openSheet(`<h2>Welcome to ${esc(UT().school)}, ${esc(name)}.</h2><p>It's August ${S.year}. Head coach <b>${esc(UT().coach.name)}</b> hands you the board: the Class of ${S.classYear} already has <b>${S.recruits.filter(r=>r.com===U().teamId&&r.cls===S.classYear).length} commits</b>, and ${targetCount()} uncommitted targets are on your priority list.</p>
        <ul class="sum"><li>⭐ Star recruits to put them on your priority board.</li><li>🔎 Scout before you trust the stars.</li><li>🏟️ Book official visits for home games now.</li><li>▶ Advance when your hours are spent.</li></ul><p class="small muted">Full guide: Office → How to play.</p><button class="btn pri wide" id="wok">Let's go</button>`,"sum");
       $("#wok").onclick=closeSheet;},40);};
 }
+
+function showRetire(){const r=retire();const L=r.L;
+  openSheet(`<div class="cer"><div class="cer-k">FINAL CAREER REPORT</div><h2>${esc(U().name)}</h2><div class="muted">${esc(r.title)} · ${r.seasons} classes · ${L.teams.map(id=>esc(T(id).school)).join(" → ")}</div>
+   <div class="big-res">${r.hof?"🏛️ HALL OF FAME — first ballot.":"Hall of Fame score "+r.score+" (needed 120). A fine career."}</div>
+   <ul class="sum"><li>🏆 ${L.nat} national titles · ${L.conf} conference titles · ${L.cfp} playoff trips</li><li>📜 ${L.top1} #1 classes · ${L.top10} top-10 classes · ${L.roty}× Recruiter of the Year</li><li>🏈 ${L.drafted.length} signees drafted (${L.drafted.filter(d=>d.rd===1).length} first-rounders) · ${L.heis.length} Heisman winners</li></ul>
+   <button class="btn pri wide" id="retok">Start a new career</button></div>`,"cer");
+  $("#retok").onclick=()=>{const n=S.slot;deleteSlot(n);S=null;ngSlot=n;closeSheet();render();};}
 
 // ---------- BOOT ----------
 window.addEventListener("load",()=>{
   $("#sheetClose").onclick=closeSheet;
   $("#sheet").addEventListener("click",e=>{if(e.target.id==="sheet"&&!$("#sheet").classList.contains("cer")&&!$("#sheet").classList.contains("sum"))closeSheet();});
-  if(load()&&S&&S.v===6){render();}else{S=null;render();}
+  const m=getMeta();
+  (m.slots[m.active]?loadSlot(m.active):Promise.resolve(false)).then(ok=>{if(!ok)S=null;render();}).catch(()=>{S=null;render();});
+  try{if(location.protocol.startsWith("http")&&"serviceWorker" in navigator&&window.self===window.top)navigator.serviceWorker.register("sw.js").catch(()=>{});}catch(e){}
 });
