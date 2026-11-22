@@ -110,8 +110,8 @@ ul.sum{padding-left:0;list-style:none;margin:8px 0}ul.sum li{padding:7px 0;borde
 .news{max-height:420px;overflow-y:auto}.ni{font-size:13px;padding:7px 0;border-bottom:1px solid #1e2944}.nph{display:block;font-size:10.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.6px}
 .tbl{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}.tbl th{text-align:left;color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase;padding:4px 3px;border-bottom:1px solid var(--line)}
 .tbl td{padding:6px 3px;border-bottom:1px solid #1e2944;white-space:nowrap}.tbl tr.me td{background:color-mix(in srgb,var(--acc) 16%,transparent)}
-.pl{display:grid;grid-template-columns:14px 1fr 34px 30px 26px 54px;gap:6px;font-size:13px;padding:5px 0;border-bottom:1px solid #1e2944;align-items:center;font-variant-numeric:tabular-nums}
-.pl.stt .pn{font-weight:650}.po{color:var(--acc2);font-size:9px}.pn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.py,.pp{color:var(--mut);font-size:12px}.pov{font-weight:800}.pnil{text-align:right;color:#9fe5b0;font-size:12px}
+.pl{display:grid;grid-template-columns:14px 1fr 30px 50px 24px 50px;gap:6px;font-size:13px;padding:5px 0;border-bottom:1px solid #1e2944;align-items:center;font-variant-numeric:tabular-nums}
+.pl.stt .pn{font-weight:650}.po{color:var(--acc2);font-size:9px}.pn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.py,.pp{color:var(--mut);font-size:12px}.pov{font-weight:800;white-space:nowrap}.pnil{text-align:right;color:#9fe5b0;font-size:12px}
 .gm{display:grid;grid-template-columns:58px 1fr auto;gap:8px;font-size:13px;padding:7px 0;border-bottom:1px solid #1e2944;align-items:center}.gw{color:var(--mut);font-size:11.5px}.go{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.gr{font-weight:700}.gr.w{color:var(--good)}.gr.l{color:var(--bad)}
 .score{padding:7px 0;border-bottom:1px solid #1e2944}.sr{display:flex;justify-content:space-between;align-items:center;font-size:13.5px;padding:2px 0;color:#aab5cf}.sr.won{color:var(--tx);font-weight:700}.sr.me{color:var(--acc2)}.sr b{font-variant-numeric:tabular-nums}
 .ret{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px}.ret span:last-child{display:flex;gap:6px}
@@ -154,6 +154,9 @@ html{-webkit-text-size-adjust:100%}
 .chips.seg .cp{font-size:12px}
 .pl2.me,.lg.me{color:var(--acc2)}
 .ni.fd{cursor:pointer}
+.fit{font-size:10px;font-weight:800;padding:0 4px;border-radius:4px;margin-left:3px;vertical-align:middle}.fit.fg{background:#173d24;color:#7ee29a}.fit.fb{background:#3a1f25;color:#ff9aa0}.fit.fn{background:#22304f;color:#c9d3ea}
+.fitbox{background:#0f1729;border-radius:10px;padding:8px 10px;margin:8px 0;font-size:13px;line-height:1.7}
+.fittab{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12px;margin-top:4px}.fittab .cur{font-weight:700;color:var(--acc2)}
 @media(max-width:380px){body{font-size:14px}.adv{padding:9px 10px;font-size:13px}.ph b{font-size:14px}.grid4 .stat b{font-size:16px}.hl{font-size:17px}.acts{grid-template-columns:1fr 1fr}.mot{grid-template-columns:1fr 70px 30px}.ib{grid-template-columns:auto 1fr 60px 36px}}
 @media(min-width:700px){.acts{grid-template-columns:repeat(3,1fr)}#view{padding-top:14px}}
 </style>
@@ -489,6 +492,24 @@ const PARENT_KINDS={acad:"Mom wants a real degree plan",pt:"Dad wants a path to 
 const DIFF_MULT={easy:0.85,normal:1.1,hard:1.35};
 const SAVE_VER=7;
 
+// ===== v6 DATA: play styles & scheme synergy =====
+// Each archetype's natural fit by scheme (-1..1). Offense: Air Raid, Spread RPO, Pro Style, Power Run, Option. Defense: 4-3, 3-4, 4-2-5, 3-3-5.
+const ARCH={
+ QB:[["Pocket Passer",[0.8,0,1,0.2,-1]],["Dual-Threat",[-0.3,1,-0.4,0.2,1]],["Gunslinger",[1,0.4,0.2,-0.6,-1]],["Game Manager",[-0.4,0.2,0.6,1,0.3]]],
+ RB:[["Power Back",[-0.6,0,0.4,1,0.6]],["Scat Back",[1,0.6,-0.2,-0.6,0]],["Zone Runner",[0,1,0.6,0.2,0.4]],["Receiving Back",[0.8,0.6,0.4,-0.4,-0.6]]],
+ WR:[["Deep Threat",[1,0.4,0.4,0.2,-0.4]],["Possession",[0.6,0.4,0.8,0,-0.6]],["Slot Quick",[1,0.8,-0.2,-0.6,-0.4]],["Big Body",[0,0.4,0.8,0.6,0]]],
+ TE:[["Blocking TE",[-1,-0.2,0.6,1,0.8]],["Receiving TE",[0.6,0.8,0.4,-0.4,-0.6]],["H-Back",[-0.2,0.6,0.6,0.6,0.4]]],
+ OL:[["Mauler",[-0.6,0,0.6,1,0.6]],["Zone Blocker",[0,1,0.4,0,0.6]],["Pass Protector",[1,0.4,0.6,-0.4,-0.8]]],
+ DL:[["Nose Tackle",[0,1,-0.6,0.2]],["3-Tech Penetrator",[1,-0.2,0.8,0]],["Two-Gapper",[0.2,1,-0.2,0.6]]],
+ EDGE:[["Speed Rusher",[0.6,0,1,0.4]],["Power End",[1,-0.2,0.2,0]],["Stand-Up OLB",[-0.4,1,0.2,0.8]]],
+ LB:[["Run Stopper",[1,0.6,-0.4,0]],["Coverage LB",[0,0,1,0.8]],["Blitzer",[0.2,1,0.4,0.6]]],
+ CB:[["Press Man",[0.6,0.6,0.4,-0.4]],["Zone Corner",[0,0.2,0.6,1]],["Nickel",[-0.4,0,1,0.8]]],
+ S:[["Box Safety",[1,0.6,-0.2,0.2]],["Center Fielder",[0.2,0.4,0.8,0.6]],["Hybrid",[-0.2,0.4,1,1]]],
+ K:[["Kicker",[0,0,0,0,0]]]
+};
+const OFF_POS=["QB","RB","WR","TE","OL"];
+const FIT_LETTER={4:"A+",3:"A",2:"B+",1:"B",0:"C","-1":"C-","-2":"D+","-3":"D","-4":"F"};
+
 // ===== ENGINE =====
 let S = null; // game state
 const R = Math.random;
@@ -518,7 +539,7 @@ function genPlayer(pos,yr,baseOvr){
   const we=rint(30,95),chr=rint(25,95);
   const p={id:S.nextId++,fn:pick(FIRST),ln:pick(LAST),pos,yr,ovr,pot:clamp(ovr+rint(0,Math.max(1,16-yr*3)),ovr,99),
     we,chr,nil:0,mor:rint(55,90),from:"HS",stars:0,rs:R()<0.3,tr:genTraits(we,chr),hist:[],st:null};
-  p.tr.forEach(x=>{if(R()<0.25+yr*0.15)x.rev=true;});p.ovr0=ovr;return p;
+  p.tr.forEach(x=>{if(R()<0.25+yr*0.15)x.rev=true;});p.ovr0=ovr;genFit(p);return p;
 }
 function budgetTotal(){const t=UT();return Math.round(1500+t.nil*1900+(U().up.collective-1)*700+U().bonusNIL+(U().ad?U().ad.nil:0));}
 function distributePayroll(){
@@ -553,7 +574,8 @@ function genRecruit(cls){
   const r={id:S.nextId++,cls,fn:pick(FIRST),ln:pick(LAST),pos,st:g[0],city:hs?hs.city:pick(g[4]),lat:hs?hs.lat:g[2]+rnd(-1.2,1.2),lon:hs?hs.lon:g[3]+rnd(-1.4,1.4),hs:hs?hs.id:null,gpa,
     ht:Math.round(sz[0]+gauss(0,1.6)),wt:Math.round(sz[1]+gauss(0,sz[1]*0.06)),forty:+(POS_FORTY[pos]-ath*0.06+gauss(0,0.03)).toFixed(2),
     tPot:Math.round(tPot),tOvr:Math.round(tOvr),perc,perc0:perc,pA,pB,tag,we:we0,chr:chr0,mis:pick([-1,0,0,0,1]),leg,lifeP,fitP,tr:genTraits(we0,chr0,tag),
-    mot:mot.map(m=>+(m/ms).toFixed(3)),known:0,dec:0,sc:0,int:{},off:[],com:null,hard:false,signed:false,ov:[],ovDone:[],log:[],nilO:0,ss:{g:0},stars:3,rank:0,comp:0.85,pr:0,lastPitch:{},lastTouch:-9,flag:null};
+    mot:mot.map(m=>+(m/ms).toFixed(3)),known:0,dec:0,ar:undefined,sc:0,int:{},off:[],com:null,hard:false,signed:false,ov:[],ovDone:[],log:[],nilO:0,ss:{g:0},stars:3,rank:0,comp:0.85,pr:0,lastPitch:{},lastTouch:-9,flag:null};
+  genFit(r);if(r.fitP&&R()<0.6)r.fitP=bestScheme(r);
   return r;
 }
 function decTick(st){
@@ -1155,15 +1177,16 @@ function playBowls(sum){
 // =====================================================================
 function findRec(id){id=+id;return S.recruits.find(r=>r.id===id)||S.portal.find(r=>r.id===id);}
 function rosterOf(id){return id===U().teamId?S.roster:(T(id).roster||[]);}
-function depth(pos,roster,healthy){let l=(roster||S.roster).filter(p=>p.pos===pos);if(healthy)l=l.filter(p=>!(p.inj>0)&&!(p.susp>0));return l.sort((a,b)=>b.ovr-a.ovr);}
-function teamOVR(roster,healthy){let s=0;POSITIONS.forEach(pos=>{const d=depth(pos,roster,healthy);const n=POS_STARTERS[pos];let a=0;for(let i=0;i<n;i++)a+=(d[i]?d[i].ovr:45);s+=POS_WEIGHT[pos]*a/n;});return Math.round(s*10)/10;}
+function depth(pos,roster,healthy,tid){let l=(roster||S.roster).filter(p=>p.pos===pos);if(healthy)l=l.filter(p=>!(p.inj>0)&&!(p.susp>0));
+  if(tid){const m=new Map(l.map(p=>[p,effOvr(p,tid)]));return l.sort((a,b)=>m.get(b)-m.get(a));}return l.sort((a,b)=>b.ovr-a.ovr);}
+function teamOVR(roster,healthy,tid){let s=0;POSITIONS.forEach(pos=>{const d=depth(pos,roster,healthy,tid);const n=POS_STARTERS[pos];let a=0;for(let i=0;i<n;i++)a+=(d[i]?(tid?effOvr(d[i],tid):d[i].ovr):45);s+=POS_WEIGHT[pos]*a/n;});return Math.round(s*10)/10;}
 function genRosterFor(id){const t=T(id);const ro=[];
   POSITIONS.forEach(pos=>{for(let i=0;i<POS_ROSTER_TARGET[pos];i++)ro.push(genPlayer(pos,rint(1,4),t.talent-6));});
   for(let k=0;k<4;k++){const d=t.talent-teamOVR(ro);ro.forEach(p=>{p.ovr=clamp(Math.round(p.ovr+d),40,99);p.pot=Math.max(p.pot,p.ovr);});}
   ro.forEach(p=>{p.ovr0=p.ovr;p.stars=p.ovr>=t.talent+6?(R()<0.5?5:4):p.ovr>=t.talent?4:3;if(t.prestige<55)p.stars=Math.max(2,p.stars-1);});
   return ro;}
-function genRoster(){S.roster=genRosterFor(U().teamId);distributePayroll();}
-function refreshTalent(){S.teamIds.forEach(id=>{T(id).talent=teamOVR(rosterOf(id));});}
+function genRoster(){S.roster=genRosterFor(U().teamId);S.roster.forEach(p=>p.fk=true);distributePayroll();}
+function refreshTalent(){S.teamIds.forEach(id=>{T(id).talent=teamOVR(rosterOf(id),false,id);});}
 function pendingNIL(){let s=0;const sy=S.classYear;S.recruits.forEach(r=>{if(r.com===U().teamId&&r.nilO&&r.cls===sy)s+=r.nilO;});S.portal.forEach(r=>{if(r.com===U().teamId&&r.nilO)s+=r.nilO;});return s;}
 function clsLvl(r){return r.portal?0:(r.cls-S.classYear);}
 function clsLabel(r){const l=clsLvl(r);return l===0?"Sr":l===1?"Jr":"So";}
@@ -1192,7 +1215,7 @@ function newGame(teamId,dirName,diff,slot){
   initAD();
   S.teamIds.forEach(id=>{if(id!==teamId)T(id).roster=genRosterFor(id);});
   genRoster();
-  S.talentMean0=S.teamIds.reduce((a,id)=>a+T(id).talent,0)/S.teamIds.length;
+  refreshTalent();S.talentMean0=S.teamIds.reduce((a,id)=>a+T(id).talent,0)/S.teamIds.length;
   initStaff();
   S.classYear=S.year+1;
   genClass(S.year+1,0);genClass(S.year+2,1);genClass(S.year+3,2);
@@ -1356,7 +1379,7 @@ function presim(){
 }
 
 // ---------- GAME SIM, STATS, INJURIES ----------
-function teamPower(t){const ro=rosterOf(t.id);const tal=ro&&ro.length?teamOVR(ro,true):t.talent;let b=0;if(t.id===U().teamId){b=starterTraitBonus()+schemeBonus();}return tal+(t.coach.game-78)*0.22+b+(t.mom||0)*0.08;}
+function teamPower(t){const ro=rosterOf(t.id);const tal=ro&&ro.length?teamOVR(ro,true,t.id):t.talent;let b=0;if(t.id===U().teamId){b=starterTraitBonus()+schemeBonus();}return tal+(t.coach.game-78)*0.22+b+(t.mom||0)*0.08;}
 function simGame(g){
   if(g.done)return g;
   const h=T(g.h);let hp=teamPower(h),ap;
@@ -1388,7 +1411,7 @@ function boxScore(g){
   const uid=U().teamId;
   [[g.h,g.hs,g.as],[g.a,g.as,g.hs]].forEach(([id,pts,opp])=>{
     if(id==="FCS")return;const ro=rosterOf(id);if(!ro||!ro.length)return;
-    const st=pos=>depth(pos,ro,true);const S1=p=>{if(!p.s)p.s={g:0};return p.s;};
+    const st=pos=>depth(pos,ro,true,id);const S1=p=>{if(!p.s)p.s={g:0};return p.s;};
     const qb=st("QB")[0],rb=st("RB")[0],wrs=st("WR").slice(0,3),te=st("TE")[0],k=st("K")[0];
     const tds=Math.max(0,Math.round(pts/7.4));const fg=Math.max(0,Math.round((pts-tds*7)/3));
     let passTD=0,rushTD=0;for(let i=0;i<tds;i++){if(R()<0.58)passTD++;else rushTD++;}
@@ -1438,7 +1461,7 @@ function newSeason(first){
   S.teamIds.forEach(id=>{const t=T(id);t.mom=(t.mom||0)*0.4;t.rivW=0;t.rivL=0;t.bowl=null;t.cfpW=0;t.heis=0;t.aaN=0;
     t.w=t.l=t.cw=t.cl=t.pf=t.pa=0;t.apRank=0;t.cfpRank=0;t.ap=0;t.champ=null;t.streak=0;
     rosterOf(id).forEach(p=>{if(id===U().teamId&&p.s&&p.s.g){p.ls=p.s;p.cs=p.cs||{};Object.keys(p.s).forEach(k=>p.cs[k]=(p.cs[k]||0)+p.s[k]);}p.s=null;p.inj=0;p.susp=0;});
-    t.talent=teamOVR(rosterOf(id));t.elo=first?eloFromTalent(t):(t.elo*0.4+eloFromTalent(t)*0.6);});
+    t.talent=teamOVR(rosterOf(id),false,id);t.elo=first?eloFromTalent(t):(t.elo*0.4+eloFromTalent(t)*0.6);});
   S.polls={ap:[],cfp:[],cfpLive:false};S.cfpField=null;S.weekNo=0;S.heisman=[];
   genSchedule();
   updatePolls();
@@ -1468,7 +1491,8 @@ function weeklyProgram(sum,ug){
   let ups=0;const ris=[];
   POSITIONS.forEach(pos=>{depth(pos).forEach((p,i)=>{if(p.susp){p.susp--;return;}if(p.inj>0)return;
     const starter=i<POS_STARTERS[pos];const room=Math.max(0,p.pot-p.ovr);
-    const ch=(starter?0.16:0.06)*(room>8?1.3:room>3?1:0.4)*traitMult(p,p.yr<=2?"early":"late")*(0.7+t.coach.dev/250)*devMult(pos);
+    const fb=fitBonus(p,uid);const ch=(starter?0.16:0.06)*(room>8?1.3:room>3?1:0.4)*traitMult(p,p.yr<=2?"early":"late")*(0.7+t.coach.dev/250)*devMult(pos)*(fb>=3?1.12:fb<=-3?0.9:1);
+    if(starter&&!p.fk&&R()<0.2){p.fk=true;if(Math.abs(fb)>=3)sum.lines.push(fb>0?`🧩 Film study: ${p.pos} ${p.fn} ${p.ln} is a natural ${archName(p)} — a ${fitLetter(fb)} fit in your ${OFF_POS.includes(pos)?t.off:t.def} (+${fb}).`:`🧩 Film study: ${p.pos} ${p.fn} ${p.ln} is miscast in your ${OFF_POS.includes(pos)?t.off:t.def} (${fb}).`);}
     if(R()<ch){p.ovr=Math.min(99,p.ovr+1);ups++;if(R()<0.15)ris.push(p);}
     revealTrait(p,"any",starter?0.05:0.025,null);
     if(hasT(p,"party")&&R()<0.015){p.susp=rint(1,2);p.tr.find(x=>x.k==="party").rev=true;sum.lines.push(`🚨 ${p.pos} ${p.fn} ${p.ln} suspended ${p.susp} game${p.susp>1?"s":""} for a team-rules violation.`);addNews(`🚨 ${t.school} suspends ${p.pos} ${p.fn} ${p.ln}.`,"user");}
@@ -1600,7 +1624,7 @@ function openPortal(sum){
 }
 function portalSign(q,dest){
   const p=q.pl||{};const pl=Object.assign(p,{from:"Portal",pfrom:q.from,mor:75,inj:0,susp:0,portalIn:true});
-  if(dest===U().teamId){pl.byMe=true;pl.nil=q.nilO||0;pl.cls=S.year+1;pl.hist=pl.hist||[];S.roster.push(pl);}
+  if(dest===U().teamId){pl.byMe=true;pl.fk=(q.sc||0)>=70;pl.nil=q.nilO||0;pl.cls=S.year+1;pl.hist=pl.hist||[];S.roster.push(pl);}
   else{(T(dest).roster=T(dest).roster||[]).push(pl);}
 }
 function portalTick(final,sum){
@@ -1657,7 +1681,8 @@ function resolveRetention(pid,keep){
 // ---------- SIGNING DAY: rosters, walk-ons, class promotion ----------
 function hsToPlayer(r,uid){const o=r.tOvr+rint(3,8);const mine=r.com===uid;
   const p={id:S.nextId++,fn:r.fn,ln:r.ln,pos:r.pos,yr:1,ovr:o,ovr0:o,pot:r.tPot,we:r.we,chr:r.chr,nil:mine?(r.nilO||0):0,mor:85,from:"HS",stars:r.stars,rs:true,cls:S.classYear,hsRank:r.rank,tr:(r.tr||[]).map(x=>({...x})),hist:[]};
-  if(mine){Object.assign(p,{byMe:true,gem:r.tag,st:r.st,hlat:r.lat,hlon:r.lon,promPT:r.promPT||false});}
+  p.ar=r.ar;p.fx=r.fx;p.sa=r.sa;
+  if(mine){Object.assign(p,{byMe:true,gem:r.tag,st:r.st,hlat:r.lat,hlon:r.lon,promPT:r.promPT||false,fk:(r.sc||0)>=70});}
   return p;}
 function walkOnFill(id){const ro=rosterOf(id);let added=0;
   POSITIONS.forEach(pos=>{const have=ro.filter(p=>p.pos===pos).length;for(let i=have;i<POS_ROSTER_TARGET[pos];i++){const p=genPlayer(pos,1,50);p.ovr=rint(44,56);p.ovr0=p.ovr;p.pot=p.ovr+rint(4,16);p.stars=2;p.from="Walk-on";p.nil=0;ro.push(p);added++;}});
@@ -1739,15 +1764,15 @@ function followCoach(to){
 function springProgression(sum){
   const uid=U().teamId;let gains=0,big=[];
   S.teamIds.forEach(id=>{const t=T(id);const dev=t.coach.dev;const ro=rosterOf(id);const me=id===uid;
-    ro.forEach(p=>{const stage=p.yr<=2?"early":"late";let g=Math.max(0,(p.pot-p.ovr))*(0.17+dev/450+p.we/500)*rnd(0.6,1.3)*traitMult(p,stage)*(me?devMult(p.pos):1)+rnd(0,1.5);
+    ro.forEach(p=>{const stage=p.yr<=2?"early":"late";const fb=fitBonus(p,id);let g=Math.max(0,(p.pot-p.ovr))*(0.17+dev/450+p.we/500)*rnd(0.6,1.3)*traitMult(p,stage)*(me?devMult(p.pos):1)*(fb>=3?1.1:fb<=-3?0.92:1)+rnd(0,1.5);
       if(hasT(p,"raw")&&p.yr>=3&&R()<0.4){p.pot=Math.min(99,p.pot+rint(2,5));}
       if(hasT(p,"inj")&&R()<0.3)g*=0.4;
       const before=p.ovr;p.ovr=clamp(Math.round(p.ovr+g),40,99);p.pot=Math.max(p.pot,p.ovr);
-      if(me){gains+=p.ovr-before;if(p.ovr-before>=7)big.push(p);(p.hist=p.hist||[]).push({y:S.year,o:p.ovr});revealTrait(p,"any",0.45,null);
+      if(me){gains+=p.ovr-before;if(p.ovr-before>=7)big.push(p);(p.hist=p.hist||[]).push({y:S.year,o:p.ovr});revealTrait(p,"any",0.45,null);p.fk=true;
         if(p.promPT&&p.yr>=2){const d=depth(p.pos);if(d.indexOf(p)>=POS_STARTERS[p.pos]){p.mor=clamp(p.mor-25,0,100);sum.lines.push(`😤 ${p.pos} ${p.fn} ${p.ln} was promised early playing time and isn't starting. His family is not happy.`);p.promPT=false;}}}
     });});
   // league-wide calibration keeps the talent level realistic across decades
-  const mean=S.teamIds.reduce((a,id)=>a+teamOVR(rosterOf(id)),0)/S.teamIds.length;const shift=Math.round(clamp((S.talentMean0-mean)*0.6,-2,2));
+  const mean=S.teamIds.reduce((a,id)=>a+teamOVR(rosterOf(id),false,id),0)/S.teamIds.length;const shift=Math.round(clamp((S.talentMean0-mean)*0.6,-2,2));
   if(shift)S.teamIds.forEach(id=>rosterOf(id).forEach(p=>{p.ovr=clamp(p.ovr+shift,40,99);p.pot=Math.max(p.pot,p.ovr);}));
   refreshTalent();
   sum.lines.push(`💪 Spring development: roster gained ${Math.round(gains)} total OVR. Team OVR now ${UT().talent}.`);
@@ -1978,7 +2003,7 @@ function save(){if(!S)return;const seq=++_saveSeq;const n=S.slot||1;let js;try{j
     return idbPut(slotKey(n),z).then(()=>{try{localStorage.removeItem(slotKey(n));}catch(e){}},()=>{localStorage.setItem(slotKey(n),z);});})
   .then(()=>{if(seq!==_saveSeq)return;const m=getMeta();m.active=n;m.slots[n]=meta;setMeta(m);S._saveErr=null;})
   .catch(e=>{S._saveErr=String(e);console.warn("save failed",e);});}
-async function loadSlot(n){try{let z=null;try{z=await idbGet(slotKey(n));}catch(e){}if(!z)z=localStorage.getItem(slotKey(n));if(!z)return false;const js=await gunz(z);const o=JSON.parse(js);if(!o||o.v!==SAVE_VER)return false;S=o;S.slot=n;const m=getMeta();m.active=n;setMeta(m);return true;}catch(e){console.warn(e);return false;}}
+async function loadSlot(n){try{let z=null;try{z=await idbGet(slotKey(n));}catch(e){}if(!z)z=localStorage.getItem(slotKey(n));if(!z)return false;const js=await gunz(z);const o=JSON.parse(js);if(!o||o.v!==SAVE_VER)return false;S=o;S.slot=n;migrateFit();const m=getMeta();m.active=n;setMeta(m);return true;}catch(e){console.warn(e);return false;}}
 function deleteSlot(n){idbDel(slotKey(n));try{localStorage.removeItem(slotKey(n));}catch(e){}const m=getMeta();delete m.slots[n];setMeta(m);}
 function load(){return false;}
 
@@ -1998,6 +2023,29 @@ function scheduleOV(r,key){
 function growPipe(r,hsAmt,stAmt){if(!r||r.portal)return;const m=hasPerk("n2")?2:1;const P=U().pipe;const terr=inTerritory(r.st)?1.5:1;
   if(r.hs){const b=P.hs[r.hs]||0;P.hs[r.hs]=clamp(b+hsAmt*m,0,100);if(b<45&&P.hs[r.hs]>=45){const h=hsById(r.hs);if(h)addNews(`🔗 Pipeline: your relationship with ${h.name} (Coach ${h.coach}) is now Strong.`,"user");}}
   const sb=P.st[r.st]||0;P.st[r.st]=clamp(sb+stAmt*m*terr,0,100);if(sb<45&&P.st[r.st]>=45)addNews(`🔗 State pipeline: you're now a Strong presence in ${STATE_NAMES[r.st]||r.st}.`,"user");}
+
+// ---------- v6: PLAY STYLES & HIDDEN SCHEME FIT ----------
+function styleList(pos){return OFF_POS.includes(pos)?OFF_STYLES:DEF_STYLES;}
+function genFit(o){if(!o.pos||o.ar!==undefined)return;const A=ARCH[o.pos]||ARCH.K;o.ar=Math.floor(R()*A.length);o.fx=styleList(o.pos).map(()=>rint(-2,2));
+  // services list a play style too — and sometimes they're wrong
+  o.sa=R()<0.27?Math.floor(R()*A.length):o.ar;}
+function fitVal(p,scheme){if(p.pos==="K")return 0;genFit(p);const st=styleList(p.pos);const i=st.indexOf(scheme);if(i<0)return 0;const row=ARCH[p.pos][p.ar][1];const mu=row.reduce((x,y)=>x+y,0)/row.length;return clamp(row[i]-mu*0.85+(p.fx[i]||0)*0.25,-1,1);}
+function fitBonus(p,tid){if(!tid||p.pos==="K")return 0;const t=T(tid);return Math.round(fitVal(p,OFF_POS.includes(p.pos)?t.off:t.def)*4);}
+function effOvr(p,tid){return p.ovr+fitBonus(p,tid);}
+function archName(p,listed){genFit(p);const A=ARCH[p.pos]||ARCH.K;return A[listed?p.sa:p.ar][0];}
+function bestScheme(p){const st=styleList(p.pos);let b=st[0],bv=-9;st.forEach(s=>{const v=fitVal(p,s);if(v>bv){bv=v;b=s;}});return b;}
+function fitLetter(b){return FIT_LETTER[b]||"C";}
+// what the user's staff has figured out about a prospect's play style
+function fitView(r){const sc=r.sc||0;const out={arch:"?",fit:null,table:null,listed:r.portal?null:archName(r,true)};
+  const blind=U().up.scout<3&&sk("eval")<6&&!hasPerk("e4");
+  if(sc>=35||r.fk){out.arch=(blind&&sc<60&&r.mis!==0&&!r.fk)?archName(r,true):archName(r);out.archSure=sc>=60||r.fk||!blind;}
+  if(sc>=70||r.fk){out.fit=fitBonus(r,U().teamId);}
+  if(sc>=90||r.fk){out.table=styleList(r.pos).map(s=>({s,b:Math.round(fitVal(r,s)*4)}));}
+  return out;}
+function rosterFit(side,scheme){const ro=S.roster.filter(p=>(side==="off")===OFF_POS.includes(p.pos)&&p.pos!=="K");
+  const st=[];POSITIONS.forEach(pos=>{if((side==="off")!==OFF_POS.includes(pos)||pos==="K")return;depth(pos).slice(0,POS_STARTERS[pos]).forEach(p=>st.push(p));});
+  if(!st.length)return 0;return st.reduce((a,p)=>a+Math.round(fitVal(p,scheme)*4),0)/st.length;}
+function migrateFit(){S.recruits.forEach(genFit);S.portal.forEach(genFit);S.roster.forEach(p=>{genFit(p);if(p.fk===undefined)p.fk=true;});S.teamIds.forEach(id=>(T(id).roster||[]).forEach(genFit));}
 
 // ===== UI =====
 const $=s=>document.querySelector(s);
@@ -2019,6 +2067,7 @@ function trChips(p,showHidden){const tr=p.tr||[];const rv=tr.filter(x=>x.rev);co
   return rv.map(x=>{const t=TRAITS[x.k];return `<span class="tch ${t.good>0?"good":t.good<0?"bad":"neu"}" title="${esc(t.d)}">${t.i} ${t.n}</span>`;}).join("")+(showHidden&&hid?`<span class="tch hid">❔ ${hid} unknown</span>`:"");}
 function gpaVis(r){return !r.portal&&(r.sc>=20||r.gpaK||hasPerk("e2")||pipeHS(r)>=20);}
 function isPipe(r){return !r.portal&&(pipeHS(r)>=20||pipeSt(r)>=40);}
+function fitTag(b){return b===null||b===undefined?"":`<span class="fit f${b>=2?"g":b<=-2?"b":"n"}">${b>0?"+":""}${b}</span>`;}
 function trIcons(p){return (p.tr||[]).filter(x=>x.rev).map(x=>TRAITS[x.k].i).join("");}
 function momLabel(m){m=m||0;return m>=6?"🔥 Red hot":m>=3?"📈 Rising":m<=-6?"🧊 Ice cold":m<=-3?"📉 Sliding":"➖ Steady";}
 function trend(cur,prev,fmt){if(prev===undefined)return "";const d=Math.round((cur-prev)*10)/10;return d?` <span class="${d>0?"up":"down"}">${d>0?"▲":"▼"}${fmt?fmt(Math.abs(d)):Math.abs(d)}</span>`:"";}
@@ -2212,7 +2261,7 @@ function recRow(r,compact){
   const left=r.portal?`<div class="rk">${r.tOvr>=0&&r.sc>=40?r.tOvr:"~"+(Math.round(r.tOvr/3)*3)}<small>OVR</small></div>`:`<div class="rk">${r.rank}<small>${r.stars}★</small></div>`;
   const sub=r.portal?`${r.pos} · ex-${esc(T(r.from)?T(r.from).abbr:"?")} · ${r.yrs}yr · ask ${money(r.nil)}`:`${r.cls!==S.classYear?"<b>"+clsLabel(r)+"</b> · ":""}${r.pos} · ${esc(r.city)}, ${r.st}${r.tag==="lb"&&r.sc>=90?" · 📈":""}`;
   return `<div class="rrow" data-rid="${r.id}">${r.portal?"":`<span class="star ${tg?"on":""}" data-tg="${r.id}">${tg?"★":"☆"}</span>`}${left}
-   <div class="rmid"><div class="rn">${gem}${esc(rName(r))} ${r.portal?stars(r.stars):""}<span class="tic">${isPipe(r)?"🔗":""}${gpaVis(r)&&admitIssue(r,U().teamId)?"🎓⚠️":""}${trIcons(r)}</span>${r.flag==="up"?' <span class="up">▲</span>':r.flag==="down"?' <span class="down">▼</span>':""}</div><div class="rs">${sub}</div><div class="scw">${sc}</div></div>
+   <div class="rmid"><div class="rn">${gem}${esc(rName(r))} ${r.portal?stars(r.stars):""}<span class="tic">${(()=>{const fv=fitView(r);return fv.fit!==null&&fv.fit!==undefined&&Math.abs(fv.fit)>=3?(fv.fit>0?"🧩":"🧩❌"):"";})()}${isPipe(r)?"🔗":""}${gpaVis(r)&&admitIssue(r,U().teamId)?"🎓⚠️":""}${trIcons(r)}</span>${r.flag==="up"?' <span class="up">▲</span>':r.flag==="down"?' <span class="down">▼</span>':""}</div><div class="rs">${sub}</div><div class="scw">${sc}</div></div>
    <div class="rright"><div class="tops">${ts.map(x=>badge(x.id)).join("")}</div>${status}</div></div>`;
 }
 function portalStanding(r){const uid=U().teamId;const ts=topSchools(r,10);const i=ts.findIndex(x=>x.id===uid);if(i<0)return {i:-1,label:r.off.includes(uid)?"—":"Not offered",p:0};return {i,p:ts[i].p,label:i===0?"Leader":i<3?"Top 3":"In it"};}
@@ -2233,6 +2282,7 @@ function boardList(){
       case "mine":return r.com===uid;
       case "gems":{if(r.sc<50)return false;const sv=scoutView(r);return sv.gem;}
       case "pipe":return isPipe(r);
+      case "fits":{const fv=fitView(r);return fv.fit!==null&&fv.fit>=2;}
       case "fit":return !r.com&&recruitLevel(r)<=teamLevel(t)+4&&recruitLevel(r)>=teamLevel(t)-14;
     }
     return true;});
@@ -2245,7 +2295,7 @@ function vBoard(){
   if(P&&!b.wasP){b.st="open";b.sort="rank";}if(!P&&b.wasP){b.st="targets";}b.wasP=P;
   if(P&&!["open","targets","all","mine"].includes(b.st))b.st="open";
   const list=boardList();
-  const sts=P?[["open","Available"],["targets","My offers"],["all","All"],["mine","Signed"]]:[["targets","★ Priority"],["fit","Best fits"],["pipe","🔗 Pipelines"],["offered","Offered"],["open","Uncommitted"],["gems","💎 Gems"],["mine","Committed"],["all","All"]];
+  const sts=P?[["open","Available"],["targets","My offers"],["all","All"],["mine","Signed"]]:[["targets","★ Priority"],["fit","Best fits"],["fits","🧩 Scheme fits"],["pipe","🔗 Pipelines"],["offered","Offered"],["open","Uncommitted"],["gems","💎 Gems"],["mine","Committed"],["all","All"]];
   let h=`<div class="card filt">${P?`<div class="ptl">🌀 <b>Transfer Portal</b> — ${S.portal.filter(r=>!r.com).length} available. They commit within days; NIL talks loudest here.</div>`:""}
    ${P?"":`<div class="chips seg">${[[0,"Class of "+S.classYear+" (Sr)"],[1,(S.classYear+1)+" (Jr)"],[2,(S.classYear+2)+" (So)"],["all","All"]].map(([k,l])=>`<button class="cp ${b.cls===k?"on":""}" data-bcls="${k}">${l}</button>`).join("")}</div>`}
    <input id="bq" placeholder="Search name, city, state (TX) or high school…" value="${esc(b.q)}">
@@ -2293,6 +2343,11 @@ function recruitHTML(r){
   h+=`<div class="card in"><div class="ch">🔎 Scouting report <span class="muted small">${r.sc}% complete</span></div><div class="scbar"><i style="width:${r.sc}%"></i></div>
    <div class="grid4"><div class="stat"><b>${sv.ovr}</b><span>Current</span></div><div class="stat"><b>${sv.pot}</b><span>Ceiling</span></div><div class="stat"><b>${sv.we}</b><span>Work ethic</span></div><div class="stat"><b>${sv.chr}</b><span>Character</span></div></div>
    ${sv.gem?`<div class="flag gem">💎 Your staff believes he's badly underrated by the services.</div>`:""}${sv.bust?`<div class="flag bust">⚠️ Staff thinks the services are overrating him.</div>`:""}${sv.chrFlag?`<div class="flag bust">🚩 Character concerns in background checks.</div>`:""}
+   ${(()=>{if(r.pos==="K")return "";const fv=fitView(r);const sch=OFF_POS.includes(r.pos)?t.off:t.def;
+     let s=`<div class="fitbox"><div>🧩 Play style: <b>${esc(fv.arch)}</b>${fv.arch!=="?"&&!fv.archSure?" <span class='muted small'>(staff unsure)</span>":""}${fv.listed&&!P?` <span class="muted small">· services list: ${esc(fv.listed)}</span>`:""}</div>`;
+     s+=fv.fit!==null&&fv.fit!==undefined?`<div>Fit in your ${esc(sch)}: <b class="mg g${fitLetter(fv.fit)[0]}" style="padding:1px 6px">${fitLetter(fv.fit)}</b> ${fitTag(fv.fit)} <span class="muted small">effective ${r.portal?"OVR":"ceiling"} ${fv.fit>0?"boost":fv.fit<0?"penalty":"neutral"}</span></div>`:`<div class="muted small">Fit in your ${esc(sch)}: scout to 70% to know</div>`;
+     if(fv.table)s+=`<div class="fittab">${fv.table.map(x=>`<span class="${x.s===sch?"cur":""}">${esc(x.s)} ${fitTag(x.b)}</span>`).join("")}</div>`;else s+=`<div class="muted small">Full scheme profile at 90% scouting.</div>`;
+     return s+`</div>`;})()}
    ${P?"":`<div class="small muted">🏈 Senior year: ${esc(statLine(r))}</div>`}</div>`;
   // traits
   if((r.tr||[]).length)h+=`<div class="card in"><div class="ch">🧬 Traits <span class="muted small">revealed by film, evals, visits & conversations</span></div><div class="tchs">${trChips(r,true)}</div>${(r.tr||[]).filter(x=>x.rev).map(x=>`<div class="small muted">${TRAITS[x.k].i} ${esc(TRAITS[x.k].d)}</div>`).join("")}</div>`;
@@ -2388,8 +2443,9 @@ function vTeam(){
   if(ui.team==="roster"){
     h+=`<div class="card hero" style="--c1:${t.c1}"><div class="k">${esc(t.school)} ${esc(t.mascot)}</div><div class="hl">Team OVR ${teamOVR(S.roster)}</div><p>Roster ${S.roster.length}/105 · Payroll ${money(payroll())} of ${money(budgetTotal())} · Recruit/portal NIL committed ${money(pendingNIL())}</p></div>`;
     if(S.retention&&S.retention.length){h+=`<div class="card warn"><div class="ch">⚠️ Portal risk — retention decisions</div>${S.retention.map(x=>{const p=S.roster.find(q=>q.id===x.pid);if(!p)return "";return `<div class="ret"><span><b>${p.pos} ${esc(p.fn+" "+p.ln)}</b> · ${p.ovr} OVR · ${yrLabel(p.yr)} · now ${money(p.nil)}</span><span><button class="btn sm pri" data-keep="${p.id}">Keep (${money(x.ask)})</button><button class="btn sm" data-let="${p.id}">Let go</button></span></div>`;}).join("")}<div class="small muted">Unresolved players enter the portal when the window closes.</div></div>`;}
-    POSITIONS.forEach(pos=>{const d=depth(pos);const n=POS_STARTERS[pos];
-      h+=`<div class="card"><div class="ch">${pos} <span class="muted small">${d.length} players · starters ${n}</span></div>${d.map((p,i)=>`<div class="pl ${i<n?"stt":""}" data-pid="${p.id}"><span class="po">${i<n?"●":""}</span><span class="pn">${esc(p.fn+" "+p.ln)} ${p.from==="Portal"?"🌀":p.from==="Walk-on"?"🚶":""}${p.susp?"⛔":""}${p.inj>0?`<span class="down"> 🩹${p.inj>=12?"OUT":p.inj+"w"}</span>`:""}<span class="tic">${trIcons(p)}</span>${p.s&&p.s.g&&i<n?`<span class="pst">${esc(pStatLine(p))}</span>`:""}</span><span class="py">${yrLabel(p.yr)}</span><span class="pov">${p.ovr}${p.ovr0&&p.ovr>p.ovr0?`<sup class="up">+${p.ovr-p.ovr0}</sup>`:""}</span><span class="pp">${letter(p.pot)}</span><span class="pnil">${p.nil?money(p.nil):"—"}</span></div>`).join("")}</div>`;});
+    h+=`<div class="card small muted">Depth chart is ordered by effective rating in your schemes (${esc(t.off)} / ${esc(t.def)}). Colored tags show known scheme-fit bonuses; practice reveals the rest.</div>`;
+    POSITIONS.forEach(pos=>{const d=depth(pos,S.roster,false,t.id);const n=POS_STARTERS[pos];
+      h+=`<div class="card"><div class="ch">${pos} <span class="muted small">${d.length} players · starters ${n}</span></div>${d.map((p,i)=>`<div class="pl ${i<n?"stt":""}" data-pid="${p.id}"><span class="po">${i<n?"●":""}</span><span class="pn">${esc(p.fn+" "+p.ln)} ${p.from==="Portal"?"🌀":p.from==="Walk-on"?"🚶":""}${p.susp?"⛔":""}${p.inj>0?`<span class="down"> 🩹${p.inj>=12?"OUT":p.inj+"w"}</span>`:""}<span class="tic">${trIcons(p)}</span>${p.s&&p.s.g&&i<n?`<span class="pst">${esc(pStatLine(p))}</span>`:""}</span><span class="py">${yrLabel(p.yr)}</span><span class="pov">${p.ovr}${p.fk&&p.pos!=="K"?fitTag(fitBonus(p,t.id)):""}</span><span class="pp">${letter(p.pot)}</span><span class="pnil">${p.nil?money(p.nil):"—"}</span></div>`).join("")}</div>`;});
   }
   if(ui.team==="prog"){
     const ps=S.roster.filter(p=>p.ovr0).map(p=>({p,g:p.ovr-p.ovr0})).sort((a,b)=>b.g-a.g);
@@ -2409,6 +2465,8 @@ function vTeam(){
      <div class="grid3"><div class="stat"><b>${pr.toFixed(1)}</b><span>Draft picks / yr</span></div><div class="stat"><b>${t.off.split(" ")[0]}</b><span>${esc(t.off)}</span></div><div class="stat"><b>${t.def}</b><span>Defense</span></div></div>
      <div class="ch">Your grades in each recruiting category (avg. recruit)</div>${(()=>{const fake={pos:"WR",lat:t.lat,lon:t.lon,st:t.st,tOvr:70,perc:70,nilO:0,nil:100,lifeP:"any",fitP:null,leg:null,mot:MOTIVES.map(()=>1/MOTIVES.length)};return MOTIVES.filter(m=>!["pt","nil","prox","legacy","life","scheme"].includes(m[0])).map(m=>{const g=grade(t,fake,m[0]);return `<div class="goal"><span>${m[1]}</span><b class="mg g${gradeL(g)[0]}" style="padding:1px 8px">${gradeL(g)}</b></div>`;}).join("");})()}
      <div class="small muted" style="margin-top:8px">Playing time, proximity, NIL, scheme, lifestyle and family ties depend on the individual recruit — check his card.</div></div>
+     <div class="card"><div class="ch">🧩 Scheme fit</div>${[["off",t.off,"Offense"],["def",t.def,"Defense"]].map(([sd,sch,l])=>{const cur=rosterFit(sd,sch);const alt=(sd==="off"?OFF_STYLES:DEF_STYLES).map(s=>({s,v:rosterFit(sd,s)})).sort((a,b)=>b.v-a.v)[0];return `<div class="goal"><span>${l}: ${esc(sch)}</span><b>${cur>0?"+":""}${cur.toFixed(1)}/starter</b></div>${alt.s!==sch&&alt.v>cur+0.5?`<div class="small muted">Your starters would fit a ${esc(alt.s)} better (${alt.v>0?"+":""}${alt.v.toFixed(1)}). A new coordinator could switch it.</div>`:""}`;}).join("")}
+     <div class="small muted" style="margin-top:6px">Every player has a hidden play style that fits some schemes better than others (up to ±4 effective OVR). Scouting uncovers it before signing; practice reveals it after. Recruiting to your scheme — or hiring a coordinator whose scheme fits your roster — is free talent.</div></div>
      <div class="card"><div class="ch">⚔️ Rivalries</div>${rivalsOf(t.id).map(rid=>{const k=[t.id,rid].sort().join("|");const sr=(S.series||{})[k]||{};return `<div class="goal"><span>${badge(rid)} ${tname(rid)}</span><b>${sr[t.id]||0}–${sr[rid]||0}</b></div>`;}).join("")}
      <div class="small muted" style="margin-top:6px">Rivalry games are more unpredictable and swing momentum, prestige, AD support and job security. Recruits both schools want lean toward the winner. Rival staffs fight harder on your leads — and stealing a kid from a rival is worth extra.</div></div>
      <div class="card"><div class="ch">💥 Recruiting buzz: ${(t.buzz||0).toFixed(1)}</div><p class="small muted">Landing blue-chips (especially 5★) creates buzz that lifts your brand with every other recruit. It fades week to week.</p></div>
@@ -2429,8 +2487,8 @@ function vTeam(){
     const st=U().staff||[];
     h+=`<div class="card"><div class="ch">👥 Assistant coaches <span class="muted small">payroll ${money(staffPayroll())} of ${money(staffBudget())}</span></div>
      <p class="small muted">Assistants do your assistant visits (2 each per week) — best when the kid is in their 🗺️ territory or plays the position they coach. Their territories boost your pipelines; position coaches drive development; coordinators set your scheme and call the games. Staff changes happen in the offseason.</p>
-     ${STAFF_ROLES.map((r,i)=>{const a=st[i];if(!a){const cs=hireCandidates(i);return `<div class="asst empty"><div class="ch">${r.n} <span class="down small">OPEN</span></div>${cs.map(c=>`<div class="cand"><div><b>${esc(c.name)}</b>${c.style?` <span class="small muted">${esc(c.style)}</span>`:""}<div class="small muted">REC ${c.rec} · DEV ${c.dev} · SCH ${c.sch} · 🗺️ ${c.terr.join("/")}${c.pos&&c.pos.length?" · coaches "+c.pos.join("/"):""}</div></div><button class="btn sm pri" data-hire="${i}:${c.id}">Hire ${money(c.sal)}</button></div>`).join("")}</div>`;}
-       return `<div class="asst"><div class="ch">${r.n}</div><div class="cand"><div><b>${esc(a.name)}</b>${a.style?` <span class="small muted">${esc(a.style)}</span>`:""} <span class="small muted">· yr ${a.yrs+1}</span><div class="small muted">REC ${a.rec} · DEV ${a.dev} · SCH ${a.sch} · 🗺️ ${a.terr.map(s=>STATE_NAMES[s]||s).join(", ")}${a.pos&&a.pos.length?" · coaches "+a.pos.join("/"):""} · ${money(a.sal)}/yr</div></div>${canFire()?`<button class="btn sm danger" data-fire="${i}">Fire</button>`:""}</div></div>`;}).join("")}</div>`;
+     ${STAFF_ROLES.map((r,i)=>{const a=st[i];if(!a){const cs=hireCandidates(i);return `<div class="asst empty"><div class="ch">${r.n} <span class="down small">OPEN</span></div>${cs.map(c=>`<div class="cand"><div><b>${esc(c.name)}</b>${c.style?` <span class="small muted">${esc(c.style)} · roster fit ${(()=>{const v=rosterFit(c.role==="oc"?"off":"def",c.style);return (v>0?"+":"")+v.toFixed(1);})()}</span>`:""}<div class="small muted">REC ${c.rec} · DEV ${c.dev} · SCH ${c.sch} · 🗺️ ${c.terr.join("/")}${c.pos&&c.pos.length?" · coaches "+c.pos.join("/"):""}</div></div><button class="btn sm pri" data-hire="${i}:${c.id}">Hire ${money(c.sal)}</button></div>`).join("")}</div>`;}
+       return `<div class="asst"><div class="ch">${r.n}</div><div class="cand"><div><b>${esc(a.name)}</b>${a.style?` <span class="small muted">${esc(a.style)} · roster fit ${(()=>{const v=rosterFit(a.role==="oc"?"off":"def",a.style);return (v>0?"+":"")+v.toFixed(1);})()}</span>`:""} <span class="small muted">· yr ${a.yrs+1}</span><div class="small muted">REC ${a.rec} · DEV ${a.dev} · SCH ${a.sch} · 🗺️ ${a.terr.map(s=>STATE_NAMES[s]||s).join(", ")}${a.pos&&a.pos.length?" · coaches "+a.pos.join("/"):""} · ${money(a.sal)}/yr</div></div>${canFire()?`<button class="btn sm danger" data-fire="${i}">Fire</button>`:""}</div></div>`;}).join("")}</div>`;
     h+=upgradesHTML();
   }
   setTimeout(()=>{document.querySelectorAll("[data-tm]").forEach(b=>b.onclick=()=>{ui.team=b.dataset.tm;render();});
@@ -2595,7 +2653,8 @@ function vOffice(){
      <p><b>17. Your staff.</b> Five assistants each have recruiting, development and scheme ratings, a home territory and position groups. They make the assistant visits, power your pipelines, develop their positions, and set your schemes. Good ones get poached — sometimes they become head coaches and ask you to come along.</p>
      <p><b>18. Real rosters everywhere.</b> Every program has a full roster: real transfers in the portal, real draft picks, stats, injuries, a Heisman race and an All-America team. After all signings, every roster is filled out with walk-ons.</p>
      <p><b>19. Camps, all-stars & drama.</b> Camp season lets you scout dozens of prospects at once; testing moves rankings. All-American Bowl week brings live announcements. Watch for handlers, parents with demands, and dead periods when in-person contact is off.</p>
-     <p><b>20. Your career.</b> Hit AD goals for upgrade points and reputation. Win big and bigger programs call. Miss too often and you're fired.</p></div>`;
+     <p><b>20. Scheme fit.</b> Every player has a hidden play style (Dual-Threat QB, Power Back, Press Man corner…) and his own quirks, so he fits some schemes better than others — worth up to ±4 effective OVR, plus faster development in the right system. The services list a style, but they're wrong about a quarter of the time. Scout to 35% for his style, 70% for his fit in your scheme, 90% for his full profile.</p>
+     <p><b>21. Your career.</b> Hit AD goals for upgrade points and reputation. Win big and bigger programs call. Miss too often and you're fired.</p></div>`;
   }
   setTimeout(()=>{
     document.querySelectorAll("[data-of]").forEach(b=>b.onclick=()=>{ui.office=b.dataset.of;render();});bindUpgrades();
@@ -2625,6 +2684,7 @@ function openPlayer(id){const p=S.roster.find(x=>x.id===id);if(!p)return;
   openSheet(`<div class="rh"><div><h2>${esc(p.fn+" "+p.ln)}</h2><div class="rsub">${p.pos} · ${yrLabel(p.yr)} · ${p.from}${p.pfrom?" from "+esc(T(p.pfrom).school):""}${p.stars?" · signed as "+p.stars+"★":""}${p.hsRank?" (#"+p.hsRank+")":""}</div></div></div>
    <div class="grid4"><div class="stat"><b>${p.ovr}</b><span>OVR</span></div><div class="stat"><b>${letter(p.pot)}</b><span>Ceiling</span></div><div class="stat"><b>${Math.round(p.mor)}</b><span>Morale</span></div><div class="stat"><b>${p.nil?money(p.nil):"—"}</b><span>NIL/yr</span></div></div>
    ${p.inj>0?`<div class="flag bust">🩹 Injured — ${p.inj>=12?"out for the season":"out "+p.inj+" more week"+(p.inj>1?"s":"")}</div>`:""}
+   ${p.pos!=="K"?`<div class="card in"><div class="ch">🧩 Play style</div>${p.fk?`<div>${esc(archName(p))} · fit in your ${esc(OFF_POS.includes(p.pos)?UT().off:UT().def)}: <b>${fitLetter(fitBonus(p,U().teamId))}</b> ${fitTag(fitBonus(p,U().teamId))} → effective <b>${effOvr(p,U().teamId)}</b></div><div class="fittab">${styleList(p.pos).map(s=>`<span>${esc(s)} ${fitTag(Math.round(fitVal(p,s)*4))}</span>`).join("")}</div>`:`<div class="muted small">Your staff hasn't figured out his best fit yet — practice and game snaps will tell.</div>`}</div>`:""}
    <div class="card in"><div class="ch">📊 Stats</div><div class="small">This season: ${esc(pStatLine(p))}</div>${p.ls?`<div class="small muted">Last season: ${esc(pStatLine({pos:p.pos,s:p.ls}))}</div>`:""}${p.cs&&p.cs.g?`<div class="small muted">Career: ${esc(pStatLine({pos:p.pos,s:p.cs}))}</div>`:""}</div>
    <div class="card in"><div class="ch">📈 Development</div><div class="hbars">${bars}</div>${p.yr>=3&&dr?`<div class="small">NFL projection: <b>Round ${dr}</b></div>`:p.yr>=3?`<div class="small muted">Not yet on NFL radars (77+ OVR).</div>`:""}</div>
    <div class="card in"><div class="ch">🧬 Traits</div><div class="tchs">${trChips(p,true)||"<span class='muted small'>None known.</span>"}</div>${(p.tr||[]).filter(x=>x.rev).map(x=>`<div class="small muted">${TRAITS[x.k].i} ${esc(TRAITS[x.k].d)}</div>`).join("")}<div class="small muted" style="margin-top:6px">Hidden traits surface through practice reps, game snaps and spring ball.</div></div>`,"rec");}

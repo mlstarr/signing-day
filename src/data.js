@@ -322,3 +322,21 @@ const HANDLER_KINDS=["trainer","7-on-7 coach","uncle","\"family advisor\""];
 const PARENT_KINDS={acad:"Mom wants a real degree plan",pt:"Dad wants a path to early playing time",close:"Grandma wants him close enough to visit",faith:"Family wants a strong faith community",dad:"Dad played college ball and runs point on the recruitment"};
 const DIFF_MULT={easy:0.85,normal:1.1,hard:1.35};
 const SAVE_VER=7;
+
+// ===== v6 DATA: play styles & scheme synergy =====
+// Each archetype's natural fit by scheme (-1..1). Offense: Air Raid, Spread RPO, Pro Style, Power Run, Option. Defense: 4-3, 3-4, 4-2-5, 3-3-5.
+const ARCH={
+ QB:[["Pocket Passer",[0.8,0,1,0.2,-1]],["Dual-Threat",[-0.3,1,-0.4,0.2,1]],["Gunslinger",[1,0.4,0.2,-0.6,-1]],["Game Manager",[-0.4,0.2,0.6,1,0.3]]],
+ RB:[["Power Back",[-0.6,0,0.4,1,0.6]],["Scat Back",[1,0.6,-0.2,-0.6,0]],["Zone Runner",[0,1,0.6,0.2,0.4]],["Receiving Back",[0.8,0.6,0.4,-0.4,-0.6]]],
+ WR:[["Deep Threat",[1,0.4,0.4,0.2,-0.4]],["Possession",[0.6,0.4,0.8,0,-0.6]],["Slot Quick",[1,0.8,-0.2,-0.6,-0.4]],["Big Body",[0,0.4,0.8,0.6,0]]],
+ TE:[["Blocking TE",[-1,-0.2,0.6,1,0.8]],["Receiving TE",[0.6,0.8,0.4,-0.4,-0.6]],["H-Back",[-0.2,0.6,0.6,0.6,0.4]]],
+ OL:[["Mauler",[-0.6,0,0.6,1,0.6]],["Zone Blocker",[0,1,0.4,0,0.6]],["Pass Protector",[1,0.4,0.6,-0.4,-0.8]]],
+ DL:[["Nose Tackle",[0,1,-0.6,0.2]],["3-Tech Penetrator",[1,-0.2,0.8,0]],["Two-Gapper",[0.2,1,-0.2,0.6]]],
+ EDGE:[["Speed Rusher",[0.6,0,1,0.4]],["Power End",[1,-0.2,0.2,0]],["Stand-Up OLB",[-0.4,1,0.2,0.8]]],
+ LB:[["Run Stopper",[1,0.6,-0.4,0]],["Coverage LB",[0,0,1,0.8]],["Blitzer",[0.2,1,0.4,0.6]]],
+ CB:[["Press Man",[0.6,0.6,0.4,-0.4]],["Zone Corner",[0,0.2,0.6,1]],["Nickel",[-0.4,0,1,0.8]]],
+ S:[["Box Safety",[1,0.6,-0.2,0.2]],["Center Fielder",[0.2,0.4,0.8,0.6]],["Hybrid",[-0.2,0.4,1,1]]],
+ K:[["Kicker",[0,0,0,0,0]]]
+};
+const OFF_POS=["QB","RB","WR","TE","OL"];
+const FIT_LETTER={4:"A+",3:"A",2:"B+",1:"B",0:"C","-1":"C-","-2":"D+","-3":"D","-4":"F"};

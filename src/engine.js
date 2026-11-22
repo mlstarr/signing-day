@@ -27,7 +27,7 @@ function genPlayer(pos,yr,baseOvr){
   const we=rint(30,95),chr=rint(25,95);
   const p={id:S.nextId++,fn:pick(FIRST),ln:pick(LAST),pos,yr,ovr,pot:clamp(ovr+rint(0,Math.max(1,16-yr*3)),ovr,99),
     we,chr,nil:0,mor:rint(55,90),from:"HS",stars:0,rs:R()<0.3,tr:genTraits(we,chr),hist:[],st:null};
-  p.tr.forEach(x=>{if(R()<0.25+yr*0.15)x.rev=true;});p.ovr0=ovr;return p;
+  p.tr.forEach(x=>{if(R()<0.25+yr*0.15)x.rev=true;});p.ovr0=ovr;genFit(p);return p;
 }
 function budgetTotal(){const t=UT();return Math.round(1500+t.nil*1900+(U().up.collective-1)*700+U().bonusNIL+(U().ad?U().ad.nil:0));}
 function distributePayroll(){
@@ -62,7 +62,8 @@ function genRecruit(cls){
   const r={id:S.nextId++,cls,fn:pick(FIRST),ln:pick(LAST),pos,st:g[0],city:hs?hs.city:pick(g[4]),lat:hs?hs.lat:g[2]+rnd(-1.2,1.2),lon:hs?hs.lon:g[3]+rnd(-1.4,1.4),hs:hs?hs.id:null,gpa,
     ht:Math.round(sz[0]+gauss(0,1.6)),wt:Math.round(sz[1]+gauss(0,sz[1]*0.06)),forty:+(POS_FORTY[pos]-ath*0.06+gauss(0,0.03)).toFixed(2),
     tPot:Math.round(tPot),tOvr:Math.round(tOvr),perc,perc0:perc,pA,pB,tag,we:we0,chr:chr0,mis:pick([-1,0,0,0,1]),leg,lifeP,fitP,tr:genTraits(we0,chr0,tag),
-    mot:mot.map(m=>+(m/ms).toFixed(3)),known:0,dec:0,sc:0,int:{},off:[],com:null,hard:false,signed:false,ov:[],ovDone:[],log:[],nilO:0,ss:{g:0},stars:3,rank:0,comp:0.85,pr:0,lastPitch:{},lastTouch:-9,flag:null};
+    mot:mot.map(m=>+(m/ms).toFixed(3)),known:0,dec:0,ar:undefined,sc:0,int:{},off:[],com:null,hard:false,signed:false,ov:[],ovDone:[],log:[],nilO:0,ss:{g:0},stars:3,rank:0,comp:0.85,pr:0,lastPitch:{},lastTouch:-9,flag:null};
+  genFit(r);if(r.fitP&&R()<0.6)r.fitP=bestScheme(r);
   return r;
 }
 function decTick(st){
@@ -664,15 +665,16 @@ function playBowls(sum){
 // =====================================================================
 function findRec(id){id=+id;return S.recruits.find(r=>r.id===id)||S.portal.find(r=>r.id===id);}
 function rosterOf(id){return id===U().teamId?S.roster:(T(id).roster||[]);}
-function depth(pos,roster,healthy){let l=(roster||S.roster).filter(p=>p.pos===pos);if(healthy)l=l.filter(p=>!(p.inj>0)&&!(p.susp>0));return l.sort((a,b)=>b.ovr-a.ovr);}
-function teamOVR(roster,healthy){let s=0;POSITIONS.forEach(pos=>{const d=depth(pos,roster,healthy);const n=POS_STARTERS[pos];let a=0;for(let i=0;i<n;i++)a+=(d[i]?d[i].ovr:45);s+=POS_WEIGHT[pos]*a/n;});return Math.round(s*10)/10;}
+function depth(pos,roster,healthy,tid){let l=(roster||S.roster).filter(p=>p.pos===pos);if(healthy)l=l.filter(p=>!(p.inj>0)&&!(p.susp>0));
+  if(tid){const m=new Map(l.map(p=>[p,effOvr(p,tid)]));return l.sort((a,b)=>m.get(b)-m.get(a));}return l.sort((a,b)=>b.ovr-a.ovr);}
+function teamOVR(roster,healthy,tid){let s=0;POSITIONS.forEach(pos=>{const d=depth(pos,roster,healthy,tid);const n=POS_STARTERS[pos];let a=0;for(let i=0;i<n;i++)a+=(d[i]?(tid?effOvr(d[i],tid):d[i].ovr):45);s+=POS_WEIGHT[pos]*a/n;});return Math.round(s*10)/10;}
 function genRosterFor(id){const t=T(id);const ro=[];
   POSITIONS.forEach(pos=>{for(let i=0;i<POS_ROSTER_TARGET[pos];i++)ro.push(genPlayer(pos,rint(1,4),t.talent-6));});
   for(let k=0;k<4;k++){const d=t.talent-teamOVR(ro);ro.forEach(p=>{p.ovr=clamp(Math.round(p.ovr+d),40,99);p.pot=Math.max(p.pot,p.ovr);});}
   ro.forEach(p=>{p.ovr0=p.ovr;p.stars=p.ovr>=t.talent+6?(R()<0.5?5:4):p.ovr>=t.talent?4:3;if(t.prestige<55)p.stars=Math.max(2,p.stars-1);});
   return ro;}
-function genRoster(){S.roster=genRosterFor(U().teamId);distributePayroll();}
-function refreshTalent(){S.teamIds.forEach(id=>{T(id).talent=teamOVR(rosterOf(id));});}
+function genRoster(){S.roster=genRosterFor(U().teamId);S.roster.forEach(p=>p.fk=true);distributePayroll();}
+function refreshTalent(){S.teamIds.forEach(id=>{T(id).talent=teamOVR(rosterOf(id),false,id);});}
 function pendingNIL(){let s=0;const sy=S.classYear;S.recruits.forEach(r=>{if(r.com===U().teamId&&r.nilO&&r.cls===sy)s+=r.nilO;});S.portal.forEach(r=>{if(r.com===U().teamId&&r.nilO)s+=r.nilO;});return s;}
 function clsLvl(r){return r.portal?0:(r.cls-S.classYear);}
 function clsLabel(r){const l=clsLvl(r);return l===0?"Sr":l===1?"Jr":"So";}
@@ -701,7 +703,7 @@ function newGame(teamId,dirName,diff,slot){
   initAD();
   S.teamIds.forEach(id=>{if(id!==teamId)T(id).roster=genRosterFor(id);});
   genRoster();
-  S.talentMean0=S.teamIds.reduce((a,id)=>a+T(id).talent,0)/S.teamIds.length;
+  refreshTalent();S.talentMean0=S.teamIds.reduce((a,id)=>a+T(id).talent,0)/S.teamIds.length;
   initStaff();
   S.classYear=S.year+1;
   genClass(S.year+1,0);genClass(S.year+2,1);genClass(S.year+3,2);
@@ -865,7 +867,7 @@ function presim(){
 }
 
 // ---------- GAME SIM, STATS, INJURIES ----------
-function teamPower(t){const ro=rosterOf(t.id);const tal=ro&&ro.length?teamOVR(ro,true):t.talent;let b=0;if(t.id===U().teamId){b=starterTraitBonus()+schemeBonus();}return tal+(t.coach.game-78)*0.22+b+(t.mom||0)*0.08;}
+function teamPower(t){const ro=rosterOf(t.id);const tal=ro&&ro.length?teamOVR(ro,true,t.id):t.talent;let b=0;if(t.id===U().teamId){b=starterTraitBonus()+schemeBonus();}return tal+(t.coach.game-78)*0.22+b+(t.mom||0)*0.08;}
 function simGame(g){
   if(g.done)return g;
   const h=T(g.h);let hp=teamPower(h),ap;
@@ -897,7 +899,7 @@ function boxScore(g){
   const uid=U().teamId;
   [[g.h,g.hs,g.as],[g.a,g.as,g.hs]].forEach(([id,pts,opp])=>{
     if(id==="FCS")return;const ro=rosterOf(id);if(!ro||!ro.length)return;
-    const st=pos=>depth(pos,ro,true);const S1=p=>{if(!p.s)p.s={g:0};return p.s;};
+    const st=pos=>depth(pos,ro,true,id);const S1=p=>{if(!p.s)p.s={g:0};return p.s;};
     const qb=st("QB")[0],rb=st("RB")[0],wrs=st("WR").slice(0,3),te=st("TE")[0],k=st("K")[0];
     const tds=Math.max(0,Math.round(pts/7.4));const fg=Math.max(0,Math.round((pts-tds*7)/3));
     let passTD=0,rushTD=0;for(let i=0;i<tds;i++){if(R()<0.58)passTD++;else rushTD++;}
@@ -947,7 +949,7 @@ function newSeason(first){
   S.teamIds.forEach(id=>{const t=T(id);t.mom=(t.mom||0)*0.4;t.rivW=0;t.rivL=0;t.bowl=null;t.cfpW=0;t.heis=0;t.aaN=0;
     t.w=t.l=t.cw=t.cl=t.pf=t.pa=0;t.apRank=0;t.cfpRank=0;t.ap=0;t.champ=null;t.streak=0;
     rosterOf(id).forEach(p=>{if(id===U().teamId&&p.s&&p.s.g){p.ls=p.s;p.cs=p.cs||{};Object.keys(p.s).forEach(k=>p.cs[k]=(p.cs[k]||0)+p.s[k]);}p.s=null;p.inj=0;p.susp=0;});
-    t.talent=teamOVR(rosterOf(id));t.elo=first?eloFromTalent(t):(t.elo*0.4+eloFromTalent(t)*0.6);});
+    t.talent=teamOVR(rosterOf(id),false,id);t.elo=first?eloFromTalent(t):(t.elo*0.4+eloFromTalent(t)*0.6);});
   S.polls={ap:[],cfp:[],cfpLive:false};S.cfpField=null;S.weekNo=0;S.heisman=[];
   genSchedule();
   updatePolls();
@@ -977,7 +979,8 @@ function weeklyProgram(sum,ug){
   let ups=0;const ris=[];
   POSITIONS.forEach(pos=>{depth(pos).forEach((p,i)=>{if(p.susp){p.susp--;return;}if(p.inj>0)return;
     const starter=i<POS_STARTERS[pos];const room=Math.max(0,p.pot-p.ovr);
-    const ch=(starter?0.16:0.06)*(room>8?1.3:room>3?1:0.4)*traitMult(p,p.yr<=2?"early":"late")*(0.7+t.coach.dev/250)*devMult(pos);
+    const fb=fitBonus(p,uid);const ch=(starter?0.16:0.06)*(room>8?1.3:room>3?1:0.4)*traitMult(p,p.yr<=2?"early":"late")*(0.7+t.coach.dev/250)*devMult(pos)*(fb>=3?1.12:fb<=-3?0.9:1);
+    if(starter&&!p.fk&&R()<0.2){p.fk=true;if(Math.abs(fb)>=3)sum.lines.push(fb>0?`🧩 Film study: ${p.pos} ${p.fn} ${p.ln} is a natural ${archName(p)} — a ${fitLetter(fb)} fit in your ${OFF_POS.includes(pos)?t.off:t.def} (+${fb}).`:`🧩 Film study: ${p.pos} ${p.fn} ${p.ln} is miscast in your ${OFF_POS.includes(pos)?t.off:t.def} (${fb}).`);}
     if(R()<ch){p.ovr=Math.min(99,p.ovr+1);ups++;if(R()<0.15)ris.push(p);}
     revealTrait(p,"any",starter?0.05:0.025,null);
     if(hasT(p,"party")&&R()<0.015){p.susp=rint(1,2);p.tr.find(x=>x.k==="party").rev=true;sum.lines.push(`🚨 ${p.pos} ${p.fn} ${p.ln} suspended ${p.susp} game${p.susp>1?"s":""} for a team-rules violation.`);addNews(`🚨 ${t.school} suspends ${p.pos} ${p.fn} ${p.ln}.`,"user");}
@@ -1109,7 +1112,7 @@ function openPortal(sum){
 }
 function portalSign(q,dest){
   const p=q.pl||{};const pl=Object.assign(p,{from:"Portal",pfrom:q.from,mor:75,inj:0,susp:0,portalIn:true});
-  if(dest===U().teamId){pl.byMe=true;pl.nil=q.nilO||0;pl.cls=S.year+1;pl.hist=pl.hist||[];S.roster.push(pl);}
+  if(dest===U().teamId){pl.byMe=true;pl.fk=(q.sc||0)>=70;pl.nil=q.nilO||0;pl.cls=S.year+1;pl.hist=pl.hist||[];S.roster.push(pl);}
   else{(T(dest).roster=T(dest).roster||[]).push(pl);}
 }
 function portalTick(final,sum){
@@ -1166,7 +1169,8 @@ function resolveRetention(pid,keep){
 // ---------- SIGNING DAY: rosters, walk-ons, class promotion ----------
 function hsToPlayer(r,uid){const o=r.tOvr+rint(3,8);const mine=r.com===uid;
   const p={id:S.nextId++,fn:r.fn,ln:r.ln,pos:r.pos,yr:1,ovr:o,ovr0:o,pot:r.tPot,we:r.we,chr:r.chr,nil:mine?(r.nilO||0):0,mor:85,from:"HS",stars:r.stars,rs:true,cls:S.classYear,hsRank:r.rank,tr:(r.tr||[]).map(x=>({...x})),hist:[]};
-  if(mine){Object.assign(p,{byMe:true,gem:r.tag,st:r.st,hlat:r.lat,hlon:r.lon,promPT:r.promPT||false});}
+  p.ar=r.ar;p.fx=r.fx;p.sa=r.sa;
+  if(mine){Object.assign(p,{byMe:true,gem:r.tag,st:r.st,hlat:r.lat,hlon:r.lon,promPT:r.promPT||false,fk:(r.sc||0)>=70});}
   return p;}
 function walkOnFill(id){const ro=rosterOf(id);let added=0;
   POSITIONS.forEach(pos=>{const have=ro.filter(p=>p.pos===pos).length;for(let i=have;i<POS_ROSTER_TARGET[pos];i++){const p=genPlayer(pos,1,50);p.ovr=rint(44,56);p.ovr0=p.ovr;p.pot=p.ovr+rint(4,16);p.stars=2;p.from="Walk-on";p.nil=0;ro.push(p);added++;}});
@@ -1248,15 +1252,15 @@ function followCoach(to){
 function springProgression(sum){
   const uid=U().teamId;let gains=0,big=[];
   S.teamIds.forEach(id=>{const t=T(id);const dev=t.coach.dev;const ro=rosterOf(id);const me=id===uid;
-    ro.forEach(p=>{const stage=p.yr<=2?"early":"late";let g=Math.max(0,(p.pot-p.ovr))*(0.17+dev/450+p.we/500)*rnd(0.6,1.3)*traitMult(p,stage)*(me?devMult(p.pos):1)+rnd(0,1.5);
+    ro.forEach(p=>{const stage=p.yr<=2?"early":"late";const fb=fitBonus(p,id);let g=Math.max(0,(p.pot-p.ovr))*(0.17+dev/450+p.we/500)*rnd(0.6,1.3)*traitMult(p,stage)*(me?devMult(p.pos):1)*(fb>=3?1.1:fb<=-3?0.92:1)+rnd(0,1.5);
       if(hasT(p,"raw")&&p.yr>=3&&R()<0.4){p.pot=Math.min(99,p.pot+rint(2,5));}
       if(hasT(p,"inj")&&R()<0.3)g*=0.4;
       const before=p.ovr;p.ovr=clamp(Math.round(p.ovr+g),40,99);p.pot=Math.max(p.pot,p.ovr);
-      if(me){gains+=p.ovr-before;if(p.ovr-before>=7)big.push(p);(p.hist=p.hist||[]).push({y:S.year,o:p.ovr});revealTrait(p,"any",0.45,null);
+      if(me){gains+=p.ovr-before;if(p.ovr-before>=7)big.push(p);(p.hist=p.hist||[]).push({y:S.year,o:p.ovr});revealTrait(p,"any",0.45,null);p.fk=true;
         if(p.promPT&&p.yr>=2){const d=depth(p.pos);if(d.indexOf(p)>=POS_STARTERS[p.pos]){p.mor=clamp(p.mor-25,0,100);sum.lines.push(`😤 ${p.pos} ${p.fn} ${p.ln} was promised early playing time and isn't starting. His family is not happy.`);p.promPT=false;}}}
     });});
   // league-wide calibration keeps the talent level realistic across decades
-  const mean=S.teamIds.reduce((a,id)=>a+teamOVR(rosterOf(id)),0)/S.teamIds.length;const shift=Math.round(clamp((S.talentMean0-mean)*0.6,-2,2));
+  const mean=S.teamIds.reduce((a,id)=>a+teamOVR(rosterOf(id),false,id),0)/S.teamIds.length;const shift=Math.round(clamp((S.talentMean0-mean)*0.6,-2,2));
   if(shift)S.teamIds.forEach(id=>rosterOf(id).forEach(p=>{p.ovr=clamp(p.ovr+shift,40,99);p.pot=Math.max(p.pot,p.ovr);}));
   refreshTalent();
   sum.lines.push(`💪 Spring development: roster gained ${Math.round(gains)} total OVR. Team OVR now ${UT().talent}.`);
@@ -1487,7 +1491,7 @@ function save(){if(!S)return;const seq=++_saveSeq;const n=S.slot||1;let js;try{j
     return idbPut(slotKey(n),z).then(()=>{try{localStorage.removeItem(slotKey(n));}catch(e){}},()=>{localStorage.setItem(slotKey(n),z);});})
   .then(()=>{if(seq!==_saveSeq)return;const m=getMeta();m.active=n;m.slots[n]=meta;setMeta(m);S._saveErr=null;})
   .catch(e=>{S._saveErr=String(e);console.warn("save failed",e);});}
-async function loadSlot(n){try{let z=null;try{z=await idbGet(slotKey(n));}catch(e){}if(!z)z=localStorage.getItem(slotKey(n));if(!z)return false;const js=await gunz(z);const o=JSON.parse(js);if(!o||o.v!==SAVE_VER)return false;S=o;S.slot=n;const m=getMeta();m.active=n;setMeta(m);return true;}catch(e){console.warn(e);return false;}}
+async function loadSlot(n){try{let z=null;try{z=await idbGet(slotKey(n));}catch(e){}if(!z)z=localStorage.getItem(slotKey(n));if(!z)return false;const js=await gunz(z);const o=JSON.parse(js);if(!o||o.v!==SAVE_VER)return false;S=o;S.slot=n;migrateFit();const m=getMeta();m.active=n;setMeta(m);return true;}catch(e){console.warn(e);return false;}}
 function deleteSlot(n){idbDel(slotKey(n));try{localStorage.removeItem(slotKey(n));}catch(e){}const m=getMeta();delete m.slots[n];setMeta(m);}
 function load(){return false;}
 
@@ -1507,3 +1511,26 @@ function scheduleOV(r,key){
 function growPipe(r,hsAmt,stAmt){if(!r||r.portal)return;const m=hasPerk("n2")?2:1;const P=U().pipe;const terr=inTerritory(r.st)?1.5:1;
   if(r.hs){const b=P.hs[r.hs]||0;P.hs[r.hs]=clamp(b+hsAmt*m,0,100);if(b<45&&P.hs[r.hs]>=45){const h=hsById(r.hs);if(h)addNews(`🔗 Pipeline: your relationship with ${h.name} (Coach ${h.coach}) is now Strong.`,"user");}}
   const sb=P.st[r.st]||0;P.st[r.st]=clamp(sb+stAmt*m*terr,0,100);if(sb<45&&P.st[r.st]>=45)addNews(`🔗 State pipeline: you're now a Strong presence in ${STATE_NAMES[r.st]||r.st}.`,"user");}
+
+// ---------- v6: PLAY STYLES & HIDDEN SCHEME FIT ----------
+function styleList(pos){return OFF_POS.includes(pos)?OFF_STYLES:DEF_STYLES;}
+function genFit(o){if(!o.pos||o.ar!==undefined)return;const A=ARCH[o.pos]||ARCH.K;o.ar=Math.floor(R()*A.length);o.fx=styleList(o.pos).map(()=>rint(-2,2));
+  // services list a play style too — and sometimes they're wrong
+  o.sa=R()<0.27?Math.floor(R()*A.length):o.ar;}
+function fitVal(p,scheme){if(p.pos==="K")return 0;genFit(p);const st=styleList(p.pos);const i=st.indexOf(scheme);if(i<0)return 0;const row=ARCH[p.pos][p.ar][1];const mu=row.reduce((x,y)=>x+y,0)/row.length;return clamp(row[i]-mu*0.85+(p.fx[i]||0)*0.25,-1,1);}
+function fitBonus(p,tid){if(!tid||p.pos==="K")return 0;const t=T(tid);return Math.round(fitVal(p,OFF_POS.includes(p.pos)?t.off:t.def)*4);}
+function effOvr(p,tid){return p.ovr+fitBonus(p,tid);}
+function archName(p,listed){genFit(p);const A=ARCH[p.pos]||ARCH.K;return A[listed?p.sa:p.ar][0];}
+function bestScheme(p){const st=styleList(p.pos);let b=st[0],bv=-9;st.forEach(s=>{const v=fitVal(p,s);if(v>bv){bv=v;b=s;}});return b;}
+function fitLetter(b){return FIT_LETTER[b]||"C";}
+// what the user's staff has figured out about a prospect's play style
+function fitView(r){const sc=r.sc||0;const out={arch:"?",fit:null,table:null,listed:r.portal?null:archName(r,true)};
+  const blind=U().up.scout<3&&sk("eval")<6&&!hasPerk("e4");
+  if(sc>=35||r.fk){out.arch=(blind&&sc<60&&r.mis!==0&&!r.fk)?archName(r,true):archName(r);out.archSure=sc>=60||r.fk||!blind;}
+  if(sc>=70||r.fk){out.fit=fitBonus(r,U().teamId);}
+  if(sc>=90||r.fk){out.table=styleList(r.pos).map(s=>({s,b:Math.round(fitVal(r,s)*4)}));}
+  return out;}
+function rosterFit(side,scheme){const ro=S.roster.filter(p=>(side==="off")===OFF_POS.includes(p.pos)&&p.pos!=="K");
+  const st=[];POSITIONS.forEach(pos=>{if((side==="off")!==OFF_POS.includes(pos)||pos==="K")return;depth(pos).slice(0,POS_STARTERS[pos]).forEach(p=>st.push(p));});
+  if(!st.length)return 0;return st.reduce((a,p)=>a+Math.round(fitVal(p,scheme)*4),0)/st.length;}
+function migrateFit(){S.recruits.forEach(genFit);S.portal.forEach(genFit);S.roster.forEach(p=>{genFit(p);if(p.fk===undefined)p.fk=true;});S.teamIds.forEach(id=>(T(id).roster||[]).forEach(genFit));}
