@@ -94,7 +94,7 @@ function grade(t,r,m){
     case "brand": return clamp(t.prestige*0.6+t.fac*0.4+(t.mom||0)*1.2+(t.buzz||0)*1.3,10,100);
     case "scheme":{if(!r.fitP)return 70;const offPos=["QB","RB","WR","TE","OL"].includes(r.pos);const ts=offPos?t.off:t.def;if(ts===r.fitP)return 100;
       if(!offPos)return 55;const fam={"Air Raid":"Spread RPO","Spread RPO":"Air Raid","Pro Style":"Power Run","Power Run":"Pro Style"};if(r.fitP==="Option"||ts==="Option")return 25;return fam[r.fitP]===ts?66:38;}
-    case "stab": return clamp(45+Math.min(t.coach.yrs||0,10)*5-Math.max(0,t.coach.hot||0)*10,15,100);
+    case "stab": return clamp(45+Math.min(t.coach.yrs||0,10)*5-Math.max(0,t.coach.hot||0)*10+(coachPubLoy(t.coach)-50)*0.35,15,100);
     case "life":{const c=climate(t);return r.lifeP==="warm"?c:r.lifeP==="cold"?clamp(125-c,30,100):75;}
     case "legacy": return r.leg===t.id?100:25;
   }
@@ -343,7 +343,7 @@ function winner(g){return g.hs>g.as?g.h:g.a;}
 // ---------- COACHING CAROUSEL ----------
 const COACH_FN=["Mike","Tim","Chris","Jason","Brian","Matt","Kevin","Steve","Dan","Josh","Ryan","Jeff","Mark","Shane","Will","Kane","Derek","Travis","Marcus","Andre"];
 const COACH_LN=["Holloway","Brennan","Castillo","Pryor","Whitfield","Grady","Okoye","Lindqvist","Barrett","Delaney","Mercer","Sutton","Vance","Rourke","Callahan","Teague","Dorsett","Ashby","Kincaid","Merritt"];
-function fakeCoach(lo,hi){return {name:pick(COACH_FN)+" "+pick(COACH_LN),rec:rint(lo,hi),dev:rint(lo+4,hi+4),game:rint(lo+2,hi+2),hot:0,yrs:0,real:false};}
+function fakeCoach(lo,hi){return {name:pick(COACH_FN)+" "+pick(COACH_LN),rec:rint(lo,hi),dev:rint(lo+4,hi+4),game:rint(lo+2,hi+2),hot:0,yrs:0,real:false,loy:clamp(Math.round(gauss(55,18)),10,95)};}
 function coachChangeUser(sum,oldName,nc){sum.lines.push(`🎠 Coaching change: ${oldName} is out. New head coach ${nc.name} (REC ${nc.rec} / DEV ${nc.dev} / GAME ${nc.game}). Your commits are wobbling.`);U().sec=clamp(U().sec-8,0,100);trust().hc=40;sum.lines.push(`🤝 ${nc.name} doesn't know you yet — your influence with the head coach starts over.`);}
 
 // ---------- OFFICIAL VISITS ----------
@@ -687,7 +687,7 @@ function newGame(teamId,dirName,diff,slot){
   TEAM_ROWS.forEach(r=>{
     const [id,school,abbr,mascot,conf,st,lat,lon,c1,c2,prestige,nil,fac,acad,talent,coach,rec,dev,game]=r;
     S.teams[id]={id,school,abbr,mascot,conf,st,lat,lon,c1,c2,prestige,nil,fac,acad,talent,
-      coach:{name:coach,rec,dev,game,hot:0,yrs:COACH_YRS[id]!==undefined?COACH_YRS[id]:0,real:true},w:0,mom:0,base:prestige,pro:[],
+      coach:Object.assign({name:coach,rec,dev,game,hot:0,yrs:COACH_YRS[id]!==undefined?COACH_YRS[id]:0,real:true},loyFor(id)),w:0,mom:0,base:prestige,pro:[],
       off:(TEAM_STYLE[id]||[])[0]||wpick(OFF_STYLES.slice(0,4),x=>({"Spread RPO":55,"Pro Style":22,"Power Run":15,"Air Raid":8})[x]),def:(TEAM_STYLE[id]||[])[1]||pick(DEF_STYLES),l:0,cw:0,cl:0,pf:0,pa:0,elo:0,ap:0,cfp:0,apRank:0,cfpRank:0,
       need:{},target:rint(20,25),hist:[],streak:0};
     S.teamIds.push(id);
@@ -1319,7 +1319,7 @@ function coachingCarousel(sum){
     t.coach.hot=clamp(t.coach.hot*0.6-perf*0.7,-5,8);t.coach.yrs++;
     const fireP=t.coach.hot>3.2?0.35+(t.coach.hot-3.2)*0.15:0;
     if(fireP&&R()<fireP)openings.push({id,why:"fired",old:t.coach.name});
-    else if(t.w>=12&&t.coach.game>=88&&R()<0.05)openings.push({id,why:"left for the NFL",old:t.coach.name});
+    else if(t.w>=10&&t.coach.game>=84&&R()<0.045*(1.7-coachLoy(t.coach)/100)*(t.w>=12?1.3:1))openings.push({id,why:"left for the NFL",old:t.coach.name});
   });
   openings.sort((a,b)=>T(b.id).prestige-T(a.id).prestige);
   const taken=new Set(openings.map(o=>o.id));
@@ -1339,8 +1339,12 @@ function coachingCarousel(sum){
     let nc;
     if(o.filled){nc=o.filled;addNews(`✍️ ${t.school} hires ${nc.name}, an assistant from ${T(uid).school}.`,"coach",o.id);}
     else{const cands=S.teamIds.filter(id=>!taken.has(id)&&T(id).prestige<t.prestige-8&&T(id).w>=9&&T(id).coach.rec+T(id).coach.game>=140).sort((a,b)=>(T(b).w*3+T(b).coach.game)-(T(a).w*3+T(a).coach.game));
-      if(cands.length&&R()<0.75){const from=T(cands[0]);nc={...from.coach,hot:0,yrs:0};taken.add(from.id);
-        addNews(`✍️ ${t.school} hires ${nc.name} away from ${from.school}.`,"coach",o.id);
+      const dream=S.teamIds.find(id=>{const c=T(id).coach;return !taken.has(id)&&c.dream===o.id&&T(id).w>=8&&c.game+c.rec>=128+(t.prestige-60)*0.6;});if(dream){cands.unshift(dream);}
+      let fromId=null;for(const cid of cands.slice(0,4)){const c=T(cid).coach;const p=c.dream===o.id?0.9:acceptP(c,T(cid),t);
+        if(R()<p){fromId=cid;break;}
+        if(cid===uid||c.loy>=75||T(cid).prestige>=60){addNews(`🙅 ${c.name} turns down ${t.school} to stay at ${T(cid).school}.`,"coach",cid);c.spurn=(c.spurn||0)+1;if(cid===uid){c.loyKnown=1;sum.lines.push(`🙅 Coach ${c.name.split(" ").pop()} turned down ${t.school} — he's staying.`);}}}
+      if(fromId){const from=T(fromId);nc={...from.coach,hot:0,yrs:0};taken.add(from.id);
+        addNews(`✍️ ${t.school} hires ${nc.name} away from ${from.school}${from.coach.dream===o.id?" — his dream job":""}.`,"coach",o.id);if(nc.dream===o.id)nc.loy=95,delete nc.dream;
         const old=from.coach.name;from.coach=fakeCoach(56,68);
         addNews(`✍️ ${from.school} promotes ${from.coach.name} to replace ${old}.`,"coach",from.id);
         if(from.id===uid){coachChangeUser(sum,old,from.coach);newHCStaff(sum);if(!S.pendingJob||S.pendingJob.role)S.pendingJob={type:"follow",to:o.id,coach:nc.name,newCoach:from.coach.name};}
@@ -1498,7 +1502,7 @@ function save(){if(!S)return Promise.resolve();const SS=S;const seq=++_saveSeq;c
     return idbPut(slotKey(n),z).then(()=>{try{localStorage.removeItem(slotKey(n));}catch(e){}},()=>{localStorage.setItem(slotKey(n),z);});})
   .then(()=>{if(seq!==_saveSeq)return;const m=getMeta();m.active=n;m.slots[n]=meta;if(S===SS)delete m.exit;setMeta(m);SS._saveErr=null;})
   .catch(e=>{SS._saveErr=String(e);console.warn("save failed",e);});}
-async function loadSlot(n){try{let z=null;try{z=await idbGet(slotKey(n));}catch(e){}if(!z)z=localStorage.getItem(slotKey(n));if(!z)return false;const js=await gunz(z);const o=JSON.parse(js);if(!o||o.v!==SAVE_VER)return false;S=o;S.slot=n;migrateFit();trust();S.search=S.search||{};if(!S.recruits.some(r=>r.org0))seedOrganic(S.recruits);const m=getMeta();m.active=n;delete m.exit;setMeta(m);return true;}catch(e){console.warn(e);return false;}}
+async function loadSlot(n){try{let z=null;try{z=await idbGet(slotKey(n));}catch(e){}if(!z)z=localStorage.getItem(slotKey(n));if(!z)return false;const js=await gunz(z);const o=JSON.parse(js);if(!o||o.v!==SAVE_VER)return false;S=o;S.slot=n;migrateFit();migrateLoy();trust();S.search=S.search||{};if(!S.recruits.some(r=>r.org0))seedOrganic(S.recruits);const m=getMeta();m.active=n;delete m.exit;setMeta(m);return true;}catch(e){console.warn(e);return false;}}
 function deleteSlot(n){idbDel(slotKey(n));try{localStorage.removeItem(slotKey(n));}catch(e){}const m=getMeta();delete m.slots[n];setMeta(m);}
 function load(){return false;}
 
@@ -1711,3 +1715,16 @@ function recruitWeekly(sum,scale){
     const vol=lv>=2?1.9:lv===1?1.5:0.7;r.pf=(r.pf===undefined?r.tPot:r.pf)+(gauss((r.we-62)/900,0.16)*vol)*scale;
     if(R()<(lv>=1?0.003:0.001)*scale){r.pf+=R()<0.6?rnd(2,4):-rnd(2,4);}
     r.tPot=clamp(Math.round(r.pf),40,99);if(r.tPot<=r.tOvr)r.tPot=r.tOvr+1;});}
+
+// ---------- COACH LOYALTY ----------
+function loyFor(id){const x=COACH_LOY[id];if(x)return {loy:x[0],loyN:x[1],dream:x[2]||undefined,lp:clamp(Math.round(x[0]+gauss(0,6)),5,99)};const l=clamp(Math.round(gauss(55,15)),20,90);return {loy:l,lp:clamp(Math.round(l+gauss(0,12)),5,99)};}
+function coachLoy(c){if(c.loy===undefined){const l=clamp(Math.round(gauss(55,15)),20,90);c.loy=l;c.lp=clamp(Math.round(l+gauss(0,12)),5,99);}return c.loy;}
+function coachPubLoy(c){coachLoy(c);if(c.lp===undefined)c.lp=c.loy;return c.lp;}
+function acceptP(c,fromT,toT){const gap=toT.prestige-fromT.prestige;const loy=coachLoy(c);
+  return clamp(0.18+gap/45-(loy-50)/55+(c.yrs<=2?0.06:0),0.02,0.95);}
+function loyLabel(v){return v>=88?"Lifer — this is his place":v>=72?"Committed to the program":v>=50?"Would listen to the right offer":v>=32?"Open to a bigger job":"Always eyeing the next job";}
+function loyRead(){const c=UT().coach;coachLoy(c);const yrs=Math.min(U().yearsAt||0,c.yrs||0);const tr=trust().hc;
+  if(c.loyKnown||yrs>=2||tr>=70)return {lvl:2,txt:loyLabel(c.loy)};
+  if(yrs>=1||tr>=55){const b=c.loy>=70?"Seems settled here":c.loy<=40?"Seems to have one eye on bigger jobs":"Hard to read — could go either way";return {lvl:1,txt:b};}
+  return {lvl:0,txt:"Unknown — you'll learn where his heart is as you work with him"};}
+function migrateLoy(){S.teamIds.forEach(id=>{const c=T(id).coach;if(c.loy===undefined){if(c.real&&COACH_LOY[id]&&T(id).coach.name)Object.assign(c,loyFor(id));else coachLoy(c);}});}

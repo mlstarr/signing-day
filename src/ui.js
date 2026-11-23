@@ -436,6 +436,7 @@ function vTeam(){
     const c=t.coach;const hot=c.hot>3?"🔥 Hot seat":c.hot>1.5?"🌡️ Warm":"🧊 Secure";
     h+=`<div class="card"><div class="ch">Head Coach</div><div class="coach"><b>${esc(c.name)}</b><span class="muted small">${c.real?"":"(new hire)"} · ${hot}</span>
       <div class="grid3"><div class="stat"><b>${c.rec}</b><span>Recruiting</span></div><div class="stat"><b>${c.dev}</b><span>Development</span></div><div class="stat"><b>${c.game}</b><span>Game day</span></div></div></div>
+      ${(()=>{const lr=loyRead();return `<div class="goal"><span>🏠 Loyalty read: <b>${esc(lr.txt)}</b></span></div>${c.loyN&&lr.lvl>=1?`<div class="small muted">${esc(c.loyN)}.</div>`:""}`;})()}
       <div class="small muted">Recruiting powers HC visits and "Head Coach" pitches. Development grows your signees and sells "NFL Development". Game day wins games — and wins sell everything.</div></div>`;
     const st=U().staff||[];
     h+=`<div class="card"><div class="ch">👥 Assistant coaches <span class="muted small">payroll ${money(staffPayroll())} of ${money(staffBudget())}</span></div>
