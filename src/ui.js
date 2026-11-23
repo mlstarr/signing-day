@@ -51,9 +51,9 @@ function render(){
 function renderTop(){
   const t=UT();const p=phase();
   $("#top").innerHTML=`<div class="tb1">${badge(t.id)}<div class="ph"><b>${esc(p.label)}</b><span>${esc(p.date)}${["game","pre"].includes(p.type)?", "+S.year:""} · ${t.w}-${t.l}${t.apRank?" · #"+t.apRank:""}</span></div>
-   <button id="adv" class="adv">Advance ▶</button></div>
+   <button id="menub" class="menub" aria-label="Menu">☰</button><button id="adv" class="adv">Advance ▶</button></div>
    <div class="tb2"><span class="chip" title="Recruiting hours">⏱ ${U().hours}h</span><span class="chip" title="Head coach visits">🧢 HC ×${U().hc}</span><span class="chip ${budgetLeft()<0?"neg":""}" title="Player-comp budget left">💰 ${money(budgetLeft())}</span><span class="chip">★ ${targetCount()}/${targetCap()}</span><span class="chip lvl" id="lvlchip">⭐ Lv ${U().lvl}${U().pp?` · ${U().pp} perk${U().pp>1?"s":""}!`:""}</span><span class="chip">🏛️ ${Math.round(U().ad.pc)} PC</span></div>`;
-  $("#adv").onclick=doAdvance;$("#lvlchip").onclick=()=>{ui.tab="office";ui.office="career";render();window.scrollTo(0,0);};
+  $("#adv").onclick=doAdvance;$("#menub").onclick=openGameMenu;$("#lvlchip").onclick=()=>{ui.tab="office";ui.office="career";render();window.scrollTo(0,0);};
 }
 function renderTabs(){
   const tabs=[["home","🏠","Home"],["board",S.portalOpen?"🌀":"📋",S.portalOpen?"Portal":"Board"],["cls","✍️","Class"],["team","🏈","Team"],["polls","📊","Polls"],["office","🧑‍💼","Office"]];
@@ -620,9 +620,9 @@ function vOffice(){
     const cet=$("#cet");if(cet){cet.onchange=e=>{ui.ce=e.target.value;render();};$("#cesave").onclick=()=>{const c=T(ui.ce||U().teamId).coach;c.name=$("#cen").value.trim()||c.name;c.rec=clamp(+$("#cer").value||c.rec,40,99);c.dev=clamp(+$("#ced").value||c.dev,40,99);c.game=clamp(+$("#ceg").value||c.game,40,99);save();toast("Coach saved.");render();};}
     const ex=$("#exp");if(ex)ex.onclick=()=>{const blob=new Blob([serialize()],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`signing-day-${UT().abbr}-${S.year}.json`;a.click();};
     const im=$("#imp");if(im)im.onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const o=JSON.parse(rd.result);if(o.v!==SAVE_VER)throw 0;const n=S.slot;S=o;S.slot=n;save();render();toast("Save loaded.");}catch(err){toast("Bad or outdated save file.",true);}};rd.readAsText(f);};
-    const ng=$("#ngb");if(ng)ng.onclick=()=>{if(!ng.dataset.arm){ng.dataset.arm=1;ng.textContent="Tap again to delete this career";return;}const n=S.slot;deleteSlot(n);S=null;ngSlot=n;render();};
+    const ng=$("#ngb");if(ng)ng.onclick=()=>{if(!ng.dataset.arm){ng.dataset.arm=1;ng.textContent="Tap again to delete this career";return;}const n=S.slot;deleteSlot(n);S=null;ngSlot=n;ngMode="new";applyTheme(null);render();};
     document.querySelectorAll("[data-slotload]").forEach(b=>b.onclick=async()=>{b.textContent="Loading…";const ok=await loadSlot(+b.dataset.slotload);if(ok){ui.tab="home";render();toast("Career loaded.");}else toast("Couldn't load that slot.",true);});
-    document.querySelectorAll("[data-slotnew]").forEach(b=>b.onclick=()=>{save();S=null;ngSlot=+b.dataset.slotnew;render();});
+    document.querySelectorAll("[data-slotnew]").forEach(b=>b.onclick=async()=>{await save().catch(()=>{});S=null;ngSlot=+b.dataset.slotnew;ngMode="new";applyTheme(null);render();});
     document.querySelectorAll("[data-slotdel]").forEach(b=>b.onclick=()=>{if(!b.dataset.arm){b.dataset.arm=1;b.textContent="Sure?";return;}deleteSlot(+b.dataset.slotdel);render();});
     const rt=$("#retire");if(rt)rt.onclick=()=>{if(!rt.dataset.arm){rt.dataset.arm=1;rt.textContent="Tap again to retire for good";return;}showRetire();};
     const cp=$("#cpy");if(cp)cp.onclick=()=>{try{navigator.clipboard.writeText(serialize()).then(()=>toast("Save copied."),()=>toast("Clipboard blocked here — use Download.",true));}catch(e){toast("Clipboard unavailable.",true);}};
@@ -664,24 +664,52 @@ function openTeam(id){
 
 // ---------- NEW GAME ----------
 let ngSel=null;let ngSlot=null;
+let ngMode=null;
+function slotLine(s){return `${esc(s.name)} · ${esc(s.school)}<br><span class="small muted">${esc(s.ph||"")} ${s.year} · Lv ${s.lvl}${s.ts?" · saved "+new Date(s.ts).toLocaleDateString():""}</span>`;}
+function renderMainMenu(){
+  document.body.classList.add("ng");$("#top").innerHTML="";$("#tabs").innerHTML="";const m=getMeta();
+  $("#view").innerHTML=`<div class="ngw"><div class="logo">SIGNING<br><span>DAY</span></div><div class="muted ctr">College Football · NIL & Portal Era</div>
+   <div class="card"><div class="ch">Careers</div>${[1,2,3].map(n=>{const s=m.slots[n];return s?`<div class="slotr"><button class="btn wide slotb" data-cont="${n}"><b>Slot ${n}</b><span>${slotLine(s)}</span></button><button class="btn sm danger" data-del="${n}" aria-label="Delete slot ${n}">✕</button></div>`:`<div class="slotr"><button class="btn wide slotb ghost" data-newin="${n}"><b>Slot ${n}</b><span class="muted">Empty — start a new career</span></button></div>`;}).join("")}</div>
+   <button class="btn pri wide" id="mmnew">＋ New career</button>
+   <p class="small muted ctr">Your game saves automatically every week.</p></div>`;
+  document.querySelectorAll("[data-cont]").forEach(b=>b.onclick=async()=>{b.textContent="Loading…";if(await loadSlot(+b.dataset.cont)){ngMode=null;ui.tab="home";render();window.scrollTo(0,0);}else{toast("That save is from an older version and can't be loaded.",true);renderMainMenu();}});
+  document.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{if(!b.dataset.arm){b.dataset.arm=1;b.textContent="Delete?";setTimeout(()=>{if(b.isConnected){delete b.dataset.arm;b.textContent="✕";}},3000);return;}deleteSlot(+b.dataset.del);toast("Career deleted.");renderMainMenu();});
+  document.querySelectorAll("[data-newin]").forEach(b=>b.onclick=()=>{ngSlot=+b.dataset.newin;ngMode="new";renderNewGame();window.scrollTo(0,0);});
+  $("#mmnew").onclick=()=>{const free=[1,2,3].find(n=>!m.slots[n]);if(free){ngSlot=free;ngMode="new";renderNewGame();window.scrollTo(0,0);return;}
+    openSheet(`<h2>All three slots are full</h2><p>Pick a career to replace. This can't be undone.</p>${[1,2,3].map(n=>`<button class="btn wide danger" data-over="${n}">Replace slot ${n}: ${esc(m.slots[n].name)} · ${esc(m.slots[n].school)}</button>`).join("")}<button class="btn wide" id="ovc">Cancel</button>`);
+    document.querySelectorAll("[data-over]").forEach(b=>b.onclick=()=>{ngSlot=+b.dataset.over;ngMode="new";closeSheet();renderNewGame();window.scrollTo(0,0);});$("#ovc").onclick=closeSheet;};}
+function openGameMenu(){
+  openSheet(`<h2>Menu</h2><p class="small muted">${esc(U().name)} · ${esc(UT().school)} · slot ${S.slot||1}. Progress saves automatically.</p>
+   <button class="btn wide" id="gm-resume">▶ Resume</button>
+   <button class="btn wide" id="gm-menu">🏠 Save & exit to main menu</button>
+   <button class="btn wide" id="gm-new">＋ Start a new career</button>
+   <button class="btn wide" id="gm-saves">💾 Saves & backups</button>
+   <button class="btn wide" id="gm-help">📖 How to play</button>`);
+  const exit=async(mode,btn)=>{btn.textContent="Saving…";await save().catch(()=>{});closeSheet();S=null;ngSel=null;ngSlot=null;{const mm=getMeta();mm.exit=1;setMeta(mm);}window._ngq="";applyTheme(null);ngMode=mode;render();window.scrollTo(0,0);};
+  $("#gm-resume").onclick=closeSheet;
+  $("#gm-menu").onclick=e=>exit(null,e.target);
+  $("#gm-new").onclick=async e=>{await exit(null,e.target);$("#mmnew").click();};
+  $("#gm-saves").onclick=()=>{closeSheet();ui.tab="office";ui.office="save";render();window.scrollTo(0,0);};
+  $("#gm-help").onclick=()=>{closeSheet();ui.tab="office";ui.office="help";render();window.scrollTo(0,0);};}
 function renderNewGame(){
+  if(ngMode!=="new"){const m=getMeta();if([1,2,3].some(n=>m.slots[n]))return renderMainMenu();}
   document.body.classList.add("ng");$("#top").innerHTML="";$("#tabs").innerHTML="";
   const q=(window._ngq||"").toLowerCase();
   const rows=TEAM_ROWS.filter(r=>!q||r[1].toLowerCase().includes(q)||r[4].toLowerCase().includes(q)||r[15].toLowerCase().includes(q));
   const byConf={};rows.forEach(r=>{(byConf[r[4]]=byConf[r[4]]||[]).push(r);});
   const lvl=r=>r[10]>=90?"Blue blood":r[10]>=75?"Power":r[10]>=58?"Solid P4":r[10]>=48?"Rebuild":"Hard mode";
   $("#view").innerHTML=`<div class="ngw"><div class="logo">SIGNING<br><span>DAY</span></div><div class="muted ctr">College Football · NIL & Portal Era · ${TEAM_ROWS.length} real programs</div>
-   ${(()=>{const m=getMeta();const sl=[1,2,3].filter(n=>m.slots[n]);return sl.length?`<div class="card"><div class="ch">Continue a career</div>${sl.map(n=>{const s=m.slots[n];return `<button class="btn wide" data-cont="${n}">Slot ${n}: ${esc(s.name)} · ${esc(s.school)} · ${s.year} · Lv ${s.lvl}</button>`;}).join("")}${ngSlot?`<p class="small muted">New career will go in slot ${ngSlot}.</p>`:sl.length>=3?`<p class="small muted">All slots full — a new career will replace slot ${m.active||1}.</p>`:""}</div>`:"";})()}
+   ${(()=>{const m=getMeta();const sl=[1,2,3].filter(n=>m.slots[n]);const tgt=ngSlot||[1,2,3].find(n=>!m.slots[n])||m.active||1;return sl.length?`<div class="card"><button class="btn sm" id="ngback">← Main menu</button><p class="small ${m.slots[tgt]?"down":"muted"}" style="margin:8px 0 0">New career goes in slot ${tgt}${m.slots[tgt]?` — replaces ${esc(m.slots[tgt].name)} · ${esc(m.slots[tgt].school)}`:""}.</p></div>`:"";})()}
    <div class="card"><label>Your name<input id="ngname" value="${esc(window._ngn||"")}" placeholder="Director name"></label>
    <label>Difficulty<select id="ngdiff"><option value="easy">Easy — rivals recruit softer</option><option value="normal" selected>Normal</option><option value="hard">Hard — rival staffs are relentless</option></select></label></div>
    <input id="ngq" placeholder="Search school, conference, or coach…" value="${esc(window._ngq||"")}">
    ${CONFS.filter(c=>byConf[c]).map(c=>`<div class="card"><div class="ch">${c}</div>${byConf[c].map(r=>`<div class="ngt ${ngSel===r[0]?"sel":""}" data-ng="${r[0]}"><span class="bdg" style="background:${r[8]};color:${lum(r[8])>0.6?"#111":"#fff"};border-color:${r[9]}">${r[2]}</span><div class="ngi"><b>${esc(r[1])}</b><span class="small muted">HC ${esc(r[15])} · REC ${r[16]} · ${lvl(r)}</span></div><span class="ngp">${"●".repeat(Math.max(1,Math.round(r[10]/20)))}</span></div>`).join("")}</div>`).join("")}
    <div class="ngbar"><button class="btn pri wide" id="ngstart" ${ngSel?"":"disabled"}>${ngSel?"Take the job at "+esc(TEAM_ROWS.find(r=>r[0]===ngSel)[1])+" ▶":"Pick a program"}</button></div></div>`;
   document.querySelectorAll("[data-ng]").forEach(e=>e.onclick=()=>{ngSel=e.dataset.ng;window._ngn=$("#ngname").value;renderNewGame();});
-  document.querySelectorAll("[data-cont]").forEach(b=>b.onclick=async()=>{b.textContent="Loading…";if(await loadSlot(+b.dataset.cont)){ui.tab="home";render();}else toast("That save is from an older version and can't be loaded.",true);});
+  const bk=$("#ngback");if(bk)bk.onclick=()=>{ngMode=null;ngSlot=null;ngSel=null;renderMainMenu();window.scrollTo(0,0);};
   let to;$("#ngq").oninput=e=>{clearTimeout(to);to=setTimeout(()=>{window._ngq=e.target.value;window._ngn=$("#ngname").value;renderNewGame();const i=$("#ngq");i.focus();i.setSelectionRange(i.value.length,i.value.length);},300);};
   $("#ngstart").onclick=()=>{const name=$("#ngname").value.trim()||"Director";const diff=$("#ngdiff").value;$("#ngstart").textContent="Building the 2026 world…";$("#ngstart").disabled=true;
-    setTimeout(()=>{const m=getMeta();let slot=ngSlot||[1,2,3].find(n=>!m.slots[n])||m.active||1;ngSlot=null;newGame(ngSel,name,diff,slot);save();ui.tab="home";render();window.scrollTo(0,0);
+    setTimeout(()=>{const m=getMeta();let slot=ngSlot||[1,2,3].find(n=>!m.slots[n])||m.active||1;ngSlot=null;ngMode=null;newGame(ngSel,name,diff,slot);save();ui.tab="home";render();window.scrollTo(0,0);
       openSheet(`<h2>Welcome to ${esc(UT().school)}, ${esc(name)}.</h2><p>It's August ${S.year}. Head coach <b>${esc(UT().coach.name)}</b> hands you the board: the Class of ${S.classYear} already has <b>${S.recruits.filter(r=>r.com===U().teamId&&r.cls===S.classYear).length} commits</b>, and ${targetCount()} uncommitted targets are on your priority list.</p>
        <ul class="sum"><li>⭐ Star recruits to put them on your priority board.</li><li>🔎 Scout before you trust the stars.</li><li>🏟️ Book official visits for home games now.</li><li>▶ Advance when your hours are spent.</li></ul><p class="small muted">Full guide: Office → How to play.</p><button class="btn pri wide" id="wok">Let's go</button>`,"sum");
       $("#wok").onclick=closeSheet;},40);};
@@ -692,14 +720,14 @@ function showRetire(){const r=retire();const L=r.L;
    <div class="big-res">${r.hof?"🏛️ HALL OF FAME — first ballot.":"Hall of Fame score "+r.score+" (needed 120). A fine career."}</div>
    <ul class="sum"><li>🏆 ${L.nat} national titles · ${L.conf} conference titles · ${L.cfp} playoff trips</li><li>📜 ${L.top1} #1 classes · ${L.top10} top-10 classes · ${L.roty}× Recruiter of the Year</li><li>🏈 ${L.drafted.length} signees drafted (${L.drafted.filter(d=>d.rd===1).length} first-rounders) · ${L.heis.length} Heisman winners</li></ul>
    <button class="btn pri wide" id="retok">Start a new career</button></div>`,"cer");
-  $("#retok").onclick=()=>{const n=S.slot;deleteSlot(n);S=null;ngSlot=n;closeSheet();render();};}
+  $("#retok").onclick=()=>{const n=S.slot;deleteSlot(n);S=null;ngSlot=n;ngMode="new";applyTheme(null);closeSheet();render();};}
 
 // ---------- BOOT ----------
 window.addEventListener("load",()=>{
   $("#sheetClose").onclick=closeSheet;
   $("#sheet").addEventListener("click",e=>{if(e.target.id==="sheet"&&!$("#sheet").classList.contains("cer")&&!$("#sheet").classList.contains("sum"))closeSheet();});
   const m=getMeta();
-  (m.slots[m.active]?loadSlot(m.active):Promise.resolve(false)).then(ok=>{if(!ok)S=null;render();}).catch(()=>{S=null;render();});
+  (m.slots[m.active]&&!m.exit?loadSlot(m.active):Promise.resolve(false)).then(ok=>{if(!ok)S=null;render();}).catch(()=>{S=null;render();});
   try{if(location.protocol.startsWith("http")&&"serviceWorker" in navigator&&window.self===window.top)navigator.serviceWorker.register("sw.js").catch(()=>{});}catch(e){}
 });
 

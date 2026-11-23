@@ -1492,13 +1492,13 @@ function idbPut(k,v){return idb().then(db=>new Promise((res,rej)=>{const tx=db.t
 function idbGet(k){return idb().then(db=>new Promise((res,rej)=>{const tx=db.transaction("slots","readonly");const q=tx.objectStore("slots").get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);}));}
 function idbDel(k){return idb().then(db=>new Promise(res=>{const tx=db.transaction("slots","readwrite");tx.objectStore("slots").delete(k);tx.oncomplete=()=>res();tx.onerror=()=>res();})).catch(()=>{});}
 let _saveSeq=0;
-function save(){if(!S)return;const seq=++_saveSeq;const n=S.slot||1;let js;try{js=serialize();}catch(e){return;}
+function save(){if(!S)return Promise.resolve();const SS=S;const seq=++_saveSeq;const n=S.slot||1;let js;try{js=serialize();}catch(e){return;}
   const meta={school:UT().school,team:U().teamId,year:S.year,ph:phase().label,lvl:U().lvl,name:U().name,ts:Date.now()};
-  gz(js).then(z=>{if(seq!==_saveSeq)return;meta.kb=Math.round(z.length/1024);
+  return gz(js).then(z=>{if(seq!==_saveSeq)return;meta.kb=Math.round(z.length/1024);
     return idbPut(slotKey(n),z).then(()=>{try{localStorage.removeItem(slotKey(n));}catch(e){}},()=>{localStorage.setItem(slotKey(n),z);});})
-  .then(()=>{if(seq!==_saveSeq)return;const m=getMeta();m.active=n;m.slots[n]=meta;setMeta(m);S._saveErr=null;})
-  .catch(e=>{S._saveErr=String(e);console.warn("save failed",e);});}
-async function loadSlot(n){try{let z=null;try{z=await idbGet(slotKey(n));}catch(e){}if(!z)z=localStorage.getItem(slotKey(n));if(!z)return false;const js=await gunz(z);const o=JSON.parse(js);if(!o||o.v!==SAVE_VER)return false;S=o;S.slot=n;migrateFit();trust();S.search=S.search||{};if(!S.recruits.some(r=>r.org0))seedOrganic(S.recruits);const m=getMeta();m.active=n;setMeta(m);return true;}catch(e){console.warn(e);return false;}}
+  .then(()=>{if(seq!==_saveSeq)return;const m=getMeta();m.active=n;m.slots[n]=meta;if(S===SS)delete m.exit;setMeta(m);SS._saveErr=null;})
+  .catch(e=>{SS._saveErr=String(e);console.warn("save failed",e);});}
+async function loadSlot(n){try{let z=null;try{z=await idbGet(slotKey(n));}catch(e){}if(!z)z=localStorage.getItem(slotKey(n));if(!z)return false;const js=await gunz(z);const o=JSON.parse(js);if(!o||o.v!==SAVE_VER)return false;S=o;S.slot=n;migrateFit();trust();S.search=S.search||{};if(!S.recruits.some(r=>r.org0))seedOrganic(S.recruits);const m=getMeta();m.active=n;delete m.exit;setMeta(m);return true;}catch(e){console.warn(e);return false;}}
 function deleteSlot(n){idbDel(slotKey(n));try{localStorage.removeItem(slotKey(n));}catch(e){}const m=getMeta();delete m.slots[n];setMeta(m);}
 function load(){return false;}
 
