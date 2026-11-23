@@ -1215,13 +1215,15 @@ function promoteClasses(sum){
   S.recruits=S.recruits.filter(r=>r.cls>sy);
   S.classYear=sy+1;S.classTick=0;
   // everyone grows a year; ceilings shift a little (more for late bloomers)
-  S.recruits.forEach(r=>{r.tOvr=Math.min(90,r.tOvr+rint(4,8));r.tPot=clamp(Math.round(r.tPot+gauss(r.tag==="lb"?2.5:0,2)),40,99);if(r.cls===S.classYear){r.dec=decTick(r.stars);r.ss={g:0};}});
+  hsDevelop();
+  S.recruits.forEach(r=>{if(r.cls===S.classYear){r.dec=decTick(r.stars);r.ss={g:0};}});
   // late discoveries join each class
   const newSr=[],newJr=[];
   for(let i=0;i<300;i++){const r=genRecruit(S.classYear);r.pA-=4;r.pB-=4;r.perc-=4;if(R()<0.15){r.tPot=clamp(r.tPot+rint(4,9),40,99);r.tag="lb";}newSr.push(r);}
   for(let i=0;i<300;i++){const r=genRecruit(S.classYear+1);youngify(r,1);newJr.push(r);}
   S.recruits=S.recruits.concat(newSr,newJr);
   rerank(false);
+  hsMovers(sum);
   newSr.concat(newJr).forEach(r=>{r.nil=nilMarket(r);if(hasT(r,"brand"))r.nil=Math.round(r.nil*1.5/5)*5;r.dec=r.cls===S.classYear?decTick(r.stars):999;drama(r);});
   S.recruits.forEach(r=>{if(r.cls===S.classYear&&!newSr.includes(r)){r.nil=Math.max(r.nil,nilMarket(r));}});
   initOffers(S.recruits.filter(r=>r.cls===S.classYear),0,true);
@@ -1600,3 +1602,47 @@ function resolveSch(e,yes){S.schAsk=S.year;const t=UT();const st=U().staff||[];
   if(R()<followP("hc",0.3)){if(e.sd==="off"){t.off=e.to;if(st[0])st[0].style=e.to;}else{t.def=e.to;if(st[1])st[1].style=e.to;}addTrust("hc",1.5);gainDXP(8);invalidateProj();
     return `Coach ${hcLast()} bought it. The ${e.sd==="off"?"OC":"DC"} will install the ${e.to} this spring — your scouting just reshaped the depth chart.`;}
   addTrust("hc",-0.5);return `Coach ${hcLast()} isn't ready to blow up the playbook. Maybe next year — keep building the case.`;}
+
+// ---------- HIGH SCHOOL DEVELOPMENT: underclassmen rise, stall or fall ----------
+const HS_UP=["grew two inches over the summer","added 20 lbs of good weight","dominated his junior season","ran a verified 4.4 at a summer combine","moved to a bigger program and thrived","finally got a full-time starting role"];
+const HS_DOWN=["tore his ACL and missed the season","stopped growing","lost his starting job","saw his grades slip and sat out half the year","transferred and got lost on a loaded depth chart","looked a step slow against better competition"];
+const HS_DOWN_CHR=["was suspended for off-field trouble","clashed with his coaches and was benched"];
+function hsDevelop(){
+  S.recruits.forEach(r=>{if(r.portal)return;r.rk0=r.rank;
+    const soph=r.cls>S.classYear;const vol=soph?1.3:1;
+    let up=0.13,pl=0.2,dn=0.09;
+    if(r.we>=75){up+=0.06;dn-=0.03;}else if(r.we<45){up-=0.04;dn+=0.06;}
+    if(r.chr<35)dn+=0.05;
+    if(hasT(r,"gym")||hasT(r,"quick"))up+=0.05;if(hasT(r,"raw"))up+=0.07;if(hasT(r,"lazy"))pl+=0.1;if(hasT(r,"inj"))dn+=0.06;
+    if(r.tag==="lb")up+=0.08;if(r.tag==="pk")pl+=0.08;
+    const x=R();let k,dP,dO,why=null;
+    if(x<up){k="up";dP=rnd(4,9);dO=rint(2,5);why=pick(HS_UP);}
+    else if(x<up+dn){k="down";dP=-rnd(5,11);dO=-rint(1,4);why=r.chr<40&&R()<0.6?pick(HS_DOWN_CHR):pick(HS_DOWN);}
+    else if(x<up+dn+pl){k="flat";dP=-rnd(2,5);dO=-rint(0,2);why="plateaued — the tools haven't grown";}
+    else{k="steady";dP=gauss(0.9,1.8);dO=0;}
+    dP*=vol;
+    r.tPot=clamp(Math.round(r.tPot+dP),40,99);
+    r.tOvr=clamp(Math.round(r.tOvr+rint(4,8)+dO),32,Math.min(90,r.tPot-1));
+    if(k==="up"&&dP>=6&&r.tag!=="lb")r.tag="lb";
+    if(k==="down"&&dP<=-7)r.tag=r.tag==="lb"?null:"pk";
+    // the services notice some of it, late and imperfectly
+    const dT=dP*0.66+dO*0.34;const seen=dT*rnd(0.35,0.85)+gauss(0,1.2);
+    r.pA+=seen+gauss(0,1);r.pB+=seen+gauss(0,1);r.perc=(r.pA+r.pB)/2;
+    if(Math.abs(dP)>=4){r.dvl={y:S.classYear,k,why,dP:Math.round(dP)};if(r.sc>40){r.sc=Math.max(30,r.sc-rint(25,40));r.stale=1;}}
+    else if(r.dvl&&r.dvl.y<S.classYear-1)delete r.dvl;
+  });}
+function hsMovers(sum){const uid=U().teamId;
+  const mine=S.recruits.filter(r=>r.rk0&&r.cls>=S.classYear&&(S.user.targets[r.id]||r.off.includes(uid)||r.com===uid));
+  const mv=mine.map(r=>({r,d:r.rk0-r.rank})).filter(x=>Math.abs(x.d)>=40&&(x.r.rank<=400||x.r.rk0<=400));
+  const ups=mv.filter(x=>x.d>0).sort((a,b)=>b.d-a.d).slice(0,3),dns=mv.filter(x=>x.d<0).sort((a,b)=>a.d-b.d).slice(0,3);
+  const f=x=>`${x.r.pos} ${rName(x.r)} (#${x.r.rk0}→#${x.r.rank})`;
+  if(ups.length)sum.lines.push(`📈 Risers on your board after another year of high school: ${ups.map(f).join(", ")}.`);
+  if(dns.length)sum.lines.push(`📉 Fallers on your board: ${dns.map(f).join(", ")}.`);
+  const st=mine.filter(r=>r.stale&&r.dvl&&r.dvl.y===S.classYear).length;if(st)sum.lines.push(`🔄 ${st} prospect${st>1?"s":""} you'd scouted changed a lot this year — your old evals are stale. Re-scout before you trust them.`);
+  const myC=mine.filter(r=>r.com===uid&&r.dvl&&r.dvl.y===S.classYear&&r.dvl.k==="down"&&r.sc>=50);
+  myC.slice(0,2).forEach(r=>sum.lines.push(`😬 Your commit ${r.pos} ${rName(r)} ${r.dvl.why}.`));
+  S.recruits.filter(r=>r.rk0&&r.rk0<=100&&r.rank>r.rk0+80).slice(0,3).forEach(r=>addNews(`📉 Former top-100 ${r.pos} ${rName(r)} tumbles to #${r.rank} in the new rankings.`,"rank"));
+  S.recruits.filter(r=>r.rk0&&r.rank<=60&&r.rk0>r.rank+120).slice(0,3).forEach(r=>addNews(`📈 Big riser: ${r.pos} ${rName(r)} jumps from #${r.rk0} to #${r.rank}.`,"rank"));
+  // AI programs quietly pull offers from big fallers
+  S.recruits.forEach(r=>{if(!r.rk0||r.rank-r.rk0<150||r.com)return;r.off=r.off.filter(id=>id===uid||R()>0.4);});
+  S.recruits.forEach(r=>{if(r.stale&&r.sc>=75)delete r.stale;delete r.rk0;});}

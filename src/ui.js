@@ -212,7 +212,7 @@ function recRow(r,compact){
   const left=r.portal?`<div class="rk">${r.tOvr>=0&&r.sc>=40?r.tOvr:"~"+(Math.round(r.tOvr/3)*3)}<small>OVR</small></div>`:`<div class="rk">${r.rank}<small>${r.stars}★</small></div>`;
   const sub=r.portal?`${r.pos} · ex-${esc(T(r.from)?T(r.from).abbr:"?")} · ${r.yrs}yr · ask ${money(r.nil)}`:`${r.cls!==S.classYear?"<b>"+clsLabel(r)+"</b> · ":""}${r.pos} · ${esc(r.city)}, ${r.st}${r.tag==="lb"&&r.sc>=90?" · 📈":""}`;
   return `<div class="rrow" data-rid="${r.id}">${r.portal?"":`<span class="star ${tg?"on":""}" data-tg="${r.id}">${tg?"★":"☆"}</span>`}${left}
-   <div class="rmid"><div class="rn">${gem}${esc(rName(r))} ${r.portal?stars(r.stars):""}<span class="tic">${(()=>{const fv=fitView(r);return fv.fit!==null&&fv.fit!==undefined&&Math.abs(fv.fit)>=3?(fv.fit>0?"🧩":"🧩❌"):"";})()}${isPipe(r)?"🔗":""}${gpaVis(r)&&admitIssue(r,U().teamId)?"🎓⚠️":""}${trIcons(r)}</span>${r.flag==="up"?' <span class="up">▲</span>':r.flag==="down"?' <span class="down">▼</span>':""}</div><div class="rs">${sub}</div><div class="scw">${sc}</div></div>
+   <div class="rmid"><div class="rn">${gem}${esc(rName(r))} ${r.portal?stars(r.stars):""}<span class="tic">${(()=>{const fv=fitView(r);return fv.fit!==null&&fv.fit!==undefined&&Math.abs(fv.fit)>=3?(fv.fit>0?"🧩":"🧩❌"):"";})()}${isPipe(r)?"🔗":""}${gpaVis(r)&&admitIssue(r,U().teamId)?"🎓⚠️":""}${trIcons(r)}</span>${r.flag==="up"?' <span class="up">▲</span>':r.flag==="down"?' <span class="down">▼</span>':""}${r.stale&&r.sc<75?' <span class="muted" title="Eval out of date">🔄</span>':""}</div><div class="rs">${sub}</div><div class="scw">${sc}</div></div>
    <div class="rright"><div class="tops">${ts.map(x=>badge(x.id)).join("")}</div>${status}</div></div>`;
 }
 function portalStanding(r){const uid=U().teamId;const ts=topSchools(r,10);const i=ts.findIndex(x=>x.id===uid);if(i<0)return {i:-1,label:r.off.includes(uid)?"—":"Not offered",p:0};return {i,p:ts[i].p,label:i===0?"Leader":i<3?"Top 3":"In it"};}
@@ -293,6 +293,7 @@ function recruitHTML(r){
   // scouting
   h+=`<div class="card in"><div class="ch">🔎 Scouting report <span class="muted small">${r.sc}% complete</span></div><div class="scbar"><i style="width:${r.sc}%"></i></div>
    <div class="grid4"><div class="stat"><b>${sv.ovr}</b><span>Current</span></div><div class="stat"><b>${sv.pot}</b><span>Ceiling</span></div><div class="stat"><b>${sv.we}</b><span>Work ethic</span></div><div class="stat"><b>${sv.chr}</b><span>Character</span></div></div>
+   ${hsDevHTML(r)}
    ${sv.gem?`<div class="flag gem">💎 Your staff believes he's badly underrated by the services.</div>`:""}${sv.bust?`<div class="flag bust">⚠️ Staff thinks the services are overrating him.</div>`:""}${sv.chrFlag?`<div class="flag bust">🚩 Character concerns in background checks.</div>`:""}
    ${(()=>{if(r.pos==="K")return "";const fv=fitView(r);const sch=OFF_POS.includes(r.pos)?t.off:t.def;
      let s=`<div class="fitbox"><div>🧩 Play style: <b>${esc(fv.arch)}</b>${fv.arch!=="?"&&!fv.archSure?" <span class='muted small'>(staff unsure)</span>":""}${fv.listed&&!P?` <span class="muted small">· services list: ${esc(fv.listed)}</span>`:""}</div>`;
@@ -601,6 +602,7 @@ function vOffice(){
      <p><b>13. Build pipelines.</b> Sign a kid and you build a relationship with his high school coach and state. Pipeline schools send film and the inside scoop on future prospects, and their kids lean your way. Your pipelines follow you from job to job.</p>
      <p><b>14. Rivalries & bowls.</b> Rivalry games are wilder and matter more — for momentum, prestige, AD support, your job security, and head-to-head recruits. Bowl wins give a small offseason bump; every playoff win gives a bigger one.</p>
      <p><b>15. Rankings.</b> ${SERVICES.A} and ${SERVICES.B} rank every prospect independently; Class → Top 300 shows both. They're about as accurate as the real services: good, not gospel.</p>
+     <p><b>16b. Kids change.</b> Juniors and sophomores aren't finished products. Every spring some hit a growth spurt or dominate their season, others stall, get hurt or slip academically. Work ethic, character and traits tilt the odds. The services catch some of it late; your old evaluations go stale (🔄) until you re-scout. Committing a sophomore early is a bet.</p>
      <p><b>16. Three classes at once.</b> The board holds seniors, juniors and sophomores. Only seniors sign, take official visits or talk NIL — but early offers, unofficial visits and calls build relationships that carry over, and a few elite juniors commit early.</p>
      <p><b>17. Your staff.</b> Five assistants each have recruiting, development and scheme ratings, a home territory and position groups. They make the assistant visits, power your pipelines, develop their positions, and set your schemes. The head coach hires and fires them — you recommend. Good ones get poached — sometimes they become head coaches and ask you to come along.</p>
      <p><b>18. Real rosters everywhere.</b> Every program has a full roster: real transfers in the portal, real draft picks, stats, injuries, a Heisman race and an All-America team. After all signings, every roster is filled out with walk-ons.</p>
@@ -698,3 +700,10 @@ window.addEventListener("load",()=>{
   (m.slots[m.active]?loadSlot(m.active):Promise.resolve(false)).then(ok=>{if(!ok)S=null;render();}).catch(()=>{S=null;render();});
   try{if(location.protocol.startsWith("http")&&"serviceWorker" in navigator&&window.self===window.top)navigator.serviceWorker.register("sw.js").catch(()=>{});}catch(e){}
 });
+
+function hsDevHTML(r){if(r.portal)return "";let h="";
+  if(r.stale&&r.sc<75)h+=`<div class="flag bust">🔄 He's changed since your last eval — your old grades may be off. Scout him to ${75}% for an updated read.</div>`;
+  const d=r.dvl;if(d&&d.y>=S.classYear-1&&d.why){const yr=d.y===S.classYear?"This past year":"Last year";
+    if(r.sc>=55&&!(r.stale&&r.sc<75))h+=`<div class="flag ${d.k==="up"?"gem":"bust"}">${d.k==="up"?"📈":"📉"} ${yr} he ${esc(d.why)}. ${d.k==="up"?"Ceiling is up.":d.k==="flat"?"Development has stalled.":"Ceiling is down."}</div>`;
+    else h+=`<div class="small muted" style="margin:4px 0">📰 Word on the circuit: he ${esc(d.why)}. Scout him to see what it means.</div>`;}
+  return h;}
