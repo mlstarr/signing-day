@@ -740,7 +740,7 @@ function rerank(initial){
 }
 function rerankUpdate(label,only){
   const before={};S.recruits.forEach(r=>before[r.id]=r.stars);
-  S.recruits.forEach(r=>{if(only&&!only.has(r.id))return;const tr=svcTruth(r);const k=(only?0.32:0.12)/(1+Math.max(0,clsLvl(r))*0.5);
+  S.recruits.forEach(r=>{if(only&&!only.has(r.id))return;const tr=svcTruth(r);const k=only?0.32/(1+Math.max(0,clsLvl(r))*0.2):0.14;
     r.pA+=(tr-r.pA)*k+gauss(0,1.5);r.pB+=(tr-r.pB)*k+gauss(0,1.5);r.perc=(r.pA+r.pB)/2;});
   rerank(false);
   const sr=S.recruits.filter(r=>r.cls===S.classYear);
@@ -920,6 +920,9 @@ function boxScore(g){
       const tk=rint(55,72);for(let i=0;i<tk;i++){const p=wpick(defs,x=>(x.pos==="LB"?3:x.pos==="S"?2:1.2));const s=S1(p);s.tk=(s.tk||0)+1;}
       const dInt=R()<0.5?(R()<0.3?2:1):0;for(let i=0;i<dInt;i++){const p=wpick(cb.concat(sf,lb),x=>x.pos==="LB"?0.5:1.5);if(p){const s=S1(p);s.int=(s.int||0)+1;}}
     }
+    {const off=[qb,rb,te,k].concat(wrs,st("OL").slice(0,5)).filter(Boolean);const og=(pts-26)/16,dg=(24-opp)/16;
+     off.forEach(p=>{p._gp=og;});defs.forEach(p=>{p._gp=dg;});
+     if(qb)qb._gp+=(py-220)/150+passTD*0.15-ints*0.3;}
     [qb,rb,te].concat(wrs,defs,st("OL").slice(0,5)).filter(Boolean).forEach(p=>{let ch=0.011;if(hasT(p,"inj"))ch*=2.6;if(hasT(p,"iron"))ch*=0.15;
       if(R()<ch){p.inj=R()<0.1?12:rint(1,5);const x=(p.tr||[]).find(t=>t.k==="inj");if(x)x.rev=true;if(id===uid)(S._inj=S._inj||[]).push(p);}});
   });
@@ -1029,6 +1032,7 @@ function advance(){
     if(p.week===9)addNews(`📋 The first College Football Playoff rankings are out. Top 4: ${S.polls.cfp.slice(0,4).map(id=>T(id).school).join(", ")}.`,"rank");
     evts=recruitTick(1.0,{});
     seniorStats();weeklyFeed();
+    weeklyProgress(sum,1);recruitWeekly(sum,1);
     if(p.week===5)rerankUpdate("Midseason");
     if(p.week===11)rerankUpdate("Late-season");
     if(p.week%3===1)aiAddOffers();
@@ -1050,7 +1054,8 @@ function advance(){
   if(p.type==="allstar"){evts=[];allStarWeek(sum,evts);evts=evts.concat(recruitTick(0.6,{}));}
   if(p.type==="nsd"){evts=recruitTick(1.0,{});forceSignAll();closeClass(sum);}
   if(p.type==="off"||p.type==="ov"||p.type==="camp"){
-    if(p.key==="spring1")springProgression(sum);
+    if(p.key==="spring1")springProgression(sum);else if(p.type!=="ov")weeklyProgress(sum,0.5);
+    recruitWeekly(sum,p.type==="camp"?0.8:0.5);
     if(p.type==="ov"){resolveOVs(p);aiOVs();}
     if(p.type==="camp")campResults(sum);
     const it=p.type==="ov"?1.6:1.15;
@@ -1176,7 +1181,7 @@ function hsToPlayer(r,uid){const o=r.tOvr+rint(3,8);const mine=r.com===uid;
   if(mine){Object.assign(p,{byMe:true,gem:r.tag,st:r.st,hlat:r.lat,hlon:r.lon,promPT:r.promPT||false,fk:(r.sc||0)>=70});}
   return p;}
 function walkOnFill(id){const ro=rosterOf(id);let added=0;
-  POSITIONS.forEach(pos=>{const have=ro.filter(p=>p.pos===pos).length;for(let i=have;i<POS_ROSTER_TARGET[pos];i++){const p=genPlayer(pos,1,50);p.ovr=rint(44,56);p.ovr0=p.ovr;p.pot=p.ovr+rint(4,16);p.stars=2;p.from="Walk-on";p.nil=0;ro.push(p);added++;}});
+  POSITIONS.forEach(pos=>{const have=ro.filter(p=>p.pos===pos).length;for(let i=have;i<POS_ROSTER_TARGET[pos];i++){const p=genPlayer(pos,1,50);p.ovr=rint(44,56);p.ovr0=p.ovr;p.pot=p.ovr+rint(4,16);p.stars=2;p.from="Walk-on";p.nil=0;p.rs=true;walkOnGem(p);ro.push(p);added++;}});
   while(ro.length>105){let w=null;ro.forEach(p=>{if(!w||(p.from==="Walk-on"?p.ovr-10:p.ovr)<(w.from==="Walk-on"?w.ovr-10:w.ovr))w=p;});ro.splice(ro.indexOf(w),1);}
   return added;}
 function closeClass(sum){
@@ -1218,7 +1223,7 @@ function promoteClasses(sum){
   S.classYear=sy+1;S.classTick=0;
   // everyone grows a year; ceilings shift a little (more for late bloomers)
   hsDevelop();
-  S.recruits.forEach(r=>{if(r.cls===S.classYear){r.dec=decTick(r.stars);r.ss={g:0};}});
+  S.recruits.forEach(r=>{r.so0=r.tOvr;r.sp0=r.tPot;if(r.cls===S.classYear){r.dec=decTick(r.stars);r.ss={g:0};}});
   // late discoveries join each class
   const newSr=[],newJr=[];
   for(let i=0;i<300;i++){const r=genRecruit(S.classYear);r.pA-=4;r.pB-=4;r.perc-=4;if(R()<0.15){r.tPot=clamp(r.tPot+rint(4,9),40,99);r.tag="lb";}newSr.push(r);}
@@ -1259,10 +1264,10 @@ function followCoach(to){
 function springProgression(sum){
   const uid=U().teamId;let gains=0,big=[];
   S.teamIds.forEach(id=>{const t=T(id);const dev=t.coach.dev;const ro=rosterOf(id);const me=id===uid;
-    ro.forEach(p=>{const stage=p.yr<=2?"early":"late";const fb=fitBonus(p,id);let g=Math.max(0,(p.pot-p.ovr))*(0.17+dev/450+p.we/500)*rnd(0.6,1.3)*traitMult(p,stage)*(me?devMult(p.pos):1)*(fb>=3?1.1:fb<=-3?0.92:1)+rnd(0,1.5);
+    ro.forEach(p=>{const stage=p.yr<=2?"early":"late";const fb=fitBonus(p,id);let g=Math.max(0,(p.pot-p.ovr))*(0.17+dev/450+p.we/500)*0.72*bloomMult(p)*rnd(0.6,1.3)*traitMult(p,stage)*(me?devMult(p.pos):1)*(fb>=3?1.1:fb<=-3?0.92:1)+rnd(0,1.5);
       if(hasT(p,"raw")&&p.yr>=3&&R()<0.4){p.pot=Math.min(99,p.pot+rint(2,5));}
       if(hasT(p,"inj")&&R()<0.3)g*=0.4;
-      const before=p.ovr;p.ovr=clamp(Math.round(p.ovr+g),40,99);p.pot=Math.max(p.pot,p.ovr);
+      const before=p.ovr;p.ovr=clamp(Math.round(p.ovr+g),40,99);p.pot=Math.max(p.pot,p.ovr);p.of=p.ovr;p.sd=0;
       if(me){gains+=p.ovr-before;if(p.ovr-before>=7)big.push(p);(p.hist=p.hist||[]).push({y:S.year,o:p.ovr});revealTrait(p,"any",0.45,null);p.fk=true;
         if(p.promPT&&p.yr>=2){const d=depth(p.pos);if(d.indexOf(p)>=POS_STARTERS[p.pos]){p.mor=clamp(p.mor-25,0,100);sum.lines.push(`😤 ${p.pos} ${p.fn} ${p.ln} was promised early playing time and isn't starting. His family is not happy.`);p.promPT=false;}}}
     });});
@@ -1626,7 +1631,7 @@ function hsDevelop(){
     else{k="steady";dP=gauss(0.9,1.8);dO=0;}
     dP*=vol;
     r.tPot=clamp(Math.round(r.tPot+dP),40,99);
-    r.tOvr=clamp(Math.round(r.tOvr+rint(4,8)+dO),32,Math.min(90,r.tPot-1));
+    r.tOvr=clamp(Math.round(r.tOvr+rint(1,4)+dO),32,Math.min(90,r.tPot-1));
     if(k==="up"&&dP>=6&&r.tag!=="lb")r.tag="lb";
     if(k==="down"&&dP<=-7)r.tag=r.tag==="lb"?null:"pk";
     // the services notice some of it, late and imperfectly
@@ -1670,3 +1675,39 @@ function inheritBoard(){const uid=U().teamId;const t=UT();const L=teamLevel(t);c
       return {r,s:(1/(1+d/450))*(0.5+R())*(t.need[r.pos]||1)*(1+Math.max(0,L-R0)/40)*(r.stars>=4?1.3:1)};}).filter(Boolean).sort((a,b)=>b.s-a.s).slice(0,quota[lv]);
     cands.forEach(({r})=>{r.off.push(uid);const others=r.off.filter(id=>id!==uid).map(id=>r.int[id]||0).sort((a,b)=>b-a);
       const ref=others.length?others[Math.min(1,others.length-1)]:25;const v=Math.max(8,ref*rnd(0.45,1.05)*(0.75+attract(t,r)*0.5));r.int[uid]=Math.round(Math.max(r.int[uid]||0,v));});});}
+
+// ---------- WEEKLY PROGRESSION: practice, playing time and performance ----------
+function walkOnGem(p){const x=R();const kGem=(p.pos==="K"||p.pos==="P")?3:1;
+  if(x<0.0018*kGem){p.pot=rint(88,94);}else if(x<0.016*kGem){p.pot=rint(77,87);}else return;
+  p.ovr=rint(46,56);p.ovr0=p.ovr;p.we=Math.max(p.we,rint(68,95));p.woGem=1;p.fk=false;}
+function bloomMult(p){return p.woGem?(p.yr<=1?0.42:p.yr===2?0.62:0.85):1;}
+function weeklyProgress(sum,scale){const uid=U().teamId;const notes=[];
+  S.teamIds.forEach(id=>{const t=T(id);const ro=rosterOf(id);if(!ro)return;const me=id===uid;
+    const train=0.82+t.coach.dev/420+(t.fac||60)/900;
+    const starters=new Set();if(scale>=1)POSITIONS.forEach(pos=>depth(pos,ro,true,id).slice(0,POS_STARTERS[pos]||1).forEach(p=>starters.add(p.id)));
+    ro.forEach(p=>{if(p.of===undefined||Math.round(p.of)!==p.ovr)p.of=p.ovr;const gap=Math.max(0,p.pot-p.of);
+      let m=gap*0.0072*train*(0.75+p.we/200)*traitMult(p,p.yr<=2?"early":"late");
+      if(me)m*=devMult(p.pos);m*=bloomMult(p);
+      if(starters.has(p.id))m+=0.05+gap*0.003;
+      if(p.mor!==undefined&&p.mor<40)m*=0.6;
+      if(p.of>=85)m*=clamp((97-p.of)/14,0.1,1);
+      if(p.yr>=4&&gap<3)m*=0.5;
+      let d=(m+gauss(0,0.22))*scale;
+      if(p._gp!==undefined){d+=clamp(p._gp,-1.5,1.5)*0.12*scale;delete p._gp;}
+      if(p.inj>0)d=Math.min(d,0)-0.05*scale;
+      // rare in-season breakouts and setbacks
+      if(scale>=1&&starters.has(p.id)&&R()<0.004){const b=rint(2,4);p.pot=Math.min(99,p.pot+b);if(me)notes.push(`🚀 ${p.pos} ${p.fn} ${p.ln} is breaking out — the staff thinks his ceiling just went up.`);}
+      if(R()<0.0015*scale&&p.we<50){p.pot=Math.max(p.of,p.pot-rint(2,4));}
+      const before=p.ovr;p.of=clamp(p.of+d,40,99);p.pot=Math.max(p.pot,Math.round(p.of));p.ovr=Math.round(p.of);
+      p.sd=(p.sd||0)+(p.ovr-before);
+      if(me&&p.woGem&&p.ovr>before&&p.ovr>=62&&!p.woNote){p.woNote=1;p.fk=true;notes.push(`👀 Walk-on ${p.pos} ${p.fn} ${p.ln} keeps turning heads in practice. The staff thinks he has real upside.`);}});});
+  if(notes.length)notes.slice(0,2).forEach(n=>sum.lines.push(n));
+  if(scale>=1)refreshTalent();}
+function recruitWeekly(sum,scale){
+  S.recruits.forEach(r=>{if(r.signed||r.portal)return;const lv=r.cls-S.classYear;
+    if(r.of===undefined||Math.round(r.of)!==r.tOvr)r.of=r.tOvr;if(r.pf!==undefined&&Math.round(r.pf)!==r.tPot)r.pf=r.tPot;if(r.so0===undefined){r.so0=r.tOvr;r.sp0=r.tPot;}
+    const gap=Math.max(0,r.tPot-r.of);const wf=0.75+r.we/200;
+    let d=(gap*0.004*wf+0.04)*scale+gauss(0,0.2)*scale;r.of=clamp(r.of+d,30,Math.min(92,r.tPot-1));r.tOvr=Math.round(r.of);
+    const vol=lv>=2?1.9:lv===1?1.5:0.7;r.pf=(r.pf===undefined?r.tPot:r.pf)+(gauss((r.we-62)/900,0.16)*vol)*scale;
+    if(R()<(lv>=1?0.003:0.001)*scale){r.pf+=R()<0.6?rnd(2,4):-rnd(2,4);}
+    r.tPot=clamp(Math.round(r.pf),40,99);if(r.tPot<=r.tOvr)r.tPot=r.tOvr+1;});}
