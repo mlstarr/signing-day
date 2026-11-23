@@ -857,10 +857,12 @@ function presim(){
   const keep=new Set(mine.filter(r=>r.cls===sy).slice(0,45).concat(mine.filter(r=>r.cls===sy+1).slice(0,15),mine.filter(r=>r.cls===sy+2).slice(0,5)).map(r=>r.id));
   mine.forEach(r=>{if(!keep.has(r.id)){r.off=r.off.filter(x=>x!==uid);delete r.int[uid];}});
   S.recruits.forEach(r=>{if(r.int[uid])r.int[uid]*=0.8;});
+  inheritBoard();
   const t=UT();const want=Math.round(P4.includes(t.conf)||t.conf==="Independent"?rnd(8,12):rnd(4,7));
   let have=S.recruits.filter(r=>r.com===uid&&r.cls===sy).length;
   const pool=S.recruits.filter(r=>!r.com&&r.cls===sy&&r.off.includes(uid)).sort((a,b)=>(b.int[uid]||0)-(a.int[uid]||0));
   for(const r of pool){if(have>=want)break;r.int[uid]=Math.max(r.int[uid],...r.off.map(id=>r.int[id]||0))+10;r.com=uid;r.comWk=0;have++;}
+  seedOrganic(S.recruits);
   pool.filter(r=>!r.com).slice(0,20).forEach(r=>S.user.targets[r.id]=1);
   S.recruits.filter(r=>r.cls===sy+1&&r.off.includes(uid)&&!r.com).slice(0,5).forEach(r=>S.user.targets[r.id]=1);
   S._presim=false;S.ceremonies=[];S.news=[];S.feed=[];
@@ -1230,6 +1232,7 @@ function promoteClasses(sum){
   initOffers(newJr,1);seedPipelines(newSr.concat(newJr));
   genClass(S.classYear+2,2);
   Object.keys(S.user.targets).forEach(id=>{if(!S.recruits.some(r=>r.id==id))delete S.user.targets[id];});
+  seedOrganic(S.recruits.filter(r=>!r.org0));
   sum.lines.push(`🆕 The Class of ${S.classYear} are seniors now (${S.recruits.filter(r=>r.cls===S.classYear).length} prospects). The Class of ${S.classYear+2} sophomores just hit the board.`);
 }
 function jobOffers(){
@@ -1243,6 +1246,7 @@ function takeJob(id){
   U().teamId=id;U().sec=70;U().yearsAt=0;U().bonusNIL=0;U().targets={};S.pendingJob=null;initAD();initStaff();
   S.recruits.forEach(r=>{r.nilO=0;r.ov=[];});S.portal.forEach(r=>{r.nilO=0;});S.retention=[];
   S.roster.forEach(p=>{if(!p.hist)p.hist=[];if(p.mor===undefined)p.mor=70;});distributePayroll();invalidateProj();
+  S.recruits.forEach(r=>{delete r.org;});seedOrganic(S.recruits);
   const L=leg();if(!L.teams.includes(id))L.teams.push(id);
   addNews(`🧳 You've been hired as Director of Recruiting at ${T(id).school}!`,"user");
 }
@@ -1646,3 +1650,23 @@ function hsMovers(sum){const uid=U().teamId;
   // AI programs quietly pull offers from big fallers
   S.recruits.forEach(r=>{if(!r.rk0||r.rank-r.rk0<150||r.com)return;r.off=r.off.filter(id=>id===uid||R()>0.4);});
   S.recruits.forEach(r=>{if(r.stale&&r.sc>=75)delete r.stale;delete r.rk0;});}
+
+// ---------- NATURAL INTEREST: local kids, lifelong fans, the board you inherit ----------
+const ORG_WHY={home:"Grew up nearby — he knows the program",state:"In-state kid who follows the program",fan:"Grew up a fan — his family has season tickets",region:"Likes the idea of playing in the region"};
+function seedOrganic(list){const uid=U().teamId;const t=UT();const pr=t.prestige;
+  list.forEach(r=>{r.org0=1;if(r.portal||r.signed)return;if(r.com&&r.com!==uid)return;
+    const d=miles(t.lat,t.lon,r.lat,r.lon);const at=attract(t,r);let g=0,why=null;
+    if(d<260){g=rnd(10,24)*(0.6+at);why="home";}
+    else if(r.st===t.st){g=rnd(8,18)*(0.6+at);why="state";}
+    else if(d<650&&R()<0.45){g=rnd(4,11)*(0.6+at);why="region";}
+    if(R()<0.004+pr/100*0.025){g=Math.max(g,rnd(22,36));why="fan";}
+    if(minGPA(t)-r.gpa>0.3)g*=0.5;
+    if(g>=4){r.int[uid]=Math.max(r.int[uid]||0,Math.round(g));if(g>=8)r.org=why;}});}
+function inheritBoard(){const uid=U().teamId;const t=UT();const L=teamLevel(t);const sy=S.classYear;
+  const quota={0:rint(32,42),1:rint(10,15),2:rint(3,6)};
+  [0,1,2].forEach(lv=>{
+    const cands=S.recruits.filter(r=>r.cls===sy+lv&&!r.com&&!r.off.includes(uid)&&minGPA(t)-r.gpa<=0.15).map(r=>{const R0=recruitLevel(r);const d=miles(t.lat,t.lon,r.lat,r.lon);
+      const band=(L<=R0+10&&L>=R0-12)||(d<300&&L>=R0-22&&L<=R0+16);if(!band)return null;
+      return {r,s:(1/(1+d/450))*(0.5+R())*(t.need[r.pos]||1)*(1+Math.max(0,L-R0)/40)*(r.stars>=4?1.3:1)};}).filter(Boolean).sort((a,b)=>b.s-a.s).slice(0,quota[lv]);
+    cands.forEach(({r})=>{r.off.push(uid);const others=r.off.filter(id=>id!==uid).map(id=>r.int[id]||0).sort((a,b)=>b-a);
+      const ref=others.length?others[Math.min(1,others.length-1)]:25;const v=Math.max(8,ref*rnd(0.45,1.05)*(0.75+attract(t,r)*0.5));r.int[uid]=Math.round(Math.max(r.int[uid]||0,v));});});}

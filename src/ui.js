@@ -206,7 +206,7 @@ function recRow(r,compact){
   const ts=topSchools(r,3);
   let status;
   if(r.com){status=`<span class="st ${r.com===uid?"me":"oth"}">${r.signed?"✍️":"🔒"} ${T(r.com).abbr}</span>`;}
-  else{const us=r.portal?portalStanding(r):s;status=`<span class="st ${us.i===0?"lead":us.i>0&&us.i<3?"top3":""}">${us.label}${us.p?" "+pct(us.p):""}</span>`;}
+  else{const us=r.portal?portalStanding(r):s;status=!r.portal&&us.i<0&&!r.off.includes(uid)&&(r.int[uid]||0)>=8?`<span class="st top3">👀 Interested</span>`:`<span class="st ${us.i===0?"lead":us.i>0&&us.i<3?"top3":""}">${us.label}${us.p?" "+pct(us.p):""}</span>`;}
   const sc=r.sc>0?`<i class="scb" style="width:${r.sc}%"></i>`:"";
   const sv=r.sc>=50?scoutView(r):null;const gem=sv&&sv.gem?"💎":sv&&sv.bust?"⚠️":"";
   const left=r.portal?`<div class="rk">${r.tOvr>=0&&r.sc>=40?r.tOvr:"~"+(Math.round(r.tOvr/3)*3)}<small>OVR</small></div>`:`<div class="rk">${r.rank}<small>${r.stars}★</small></div>`;
@@ -233,6 +233,7 @@ function boardList(){
       case "mine":return r.com===uid;
       case "gems":{if(r.sc<50)return false;const sv=scoutView(r);return sv.gem;}
       case "pipe":return isPipe(r);
+      case "int":return !r.off.includes(uid)&&(r.int[uid]||0)>=8&&!r.com;
       case "fits":{const fv=fitView(r);return fv.fit!==null&&fv.fit>=2;}
       case "fit":return !r.com&&recruitLevel(r)<=teamLevel(t)+4&&recruitLevel(r)>=teamLevel(t)-14;
     }
@@ -246,7 +247,7 @@ function vBoard(){
   if(P&&!b.wasP){b.st="open";b.sort="rank";}if(!P&&b.wasP){b.st="targets";}b.wasP=P;
   if(P&&!["open","targets","all","mine"].includes(b.st))b.st="open";
   const list=boardList();
-  const sts=P?[["open","Available"],["targets","My offers"],["all","All"],["mine","Signed"]]:[["targets","★ Priority"],["fit","Best fits"],["fits","🧩 Scheme fits"],["pipe","🔗 Pipelines"],["offered","Offered"],["open","Uncommitted"],["gems","💎 Gems"],["mine","Committed"],["all","All"]];
+  const sts=P?[["open","Available"],["targets","My offers"],["all","All"],["mine","Signed"]]:[["targets","★ Priority"],["fit","Best fits"],["fits","🧩 Scheme fits"],["pipe","🔗 Pipelines"],["int","👀 Interested"],["offered","Offered"],["open","Uncommitted"],["gems","💎 Gems"],["mine","Committed"],["all","All"]];
   let h=`<div class="card filt">${P?`<div class="ptl">🌀 <b>Transfer Portal</b> — ${S.portal.filter(r=>!r.com).length} available. They commit within days; NIL talks loudest here.</div>`:""}
    ${P?"":`<div class="chips seg">${[[0,"Class of "+S.classYear+" (Sr)"],[1,(S.classYear+1)+" (Jr)"],[2,(S.classYear+2)+" (So)"],["all","All"]].map(([k,l])=>`<button class="cp ${b.cls===k?"on":""}" data-bcls="${k}">${l}</button>`).join("")}</div>`}
    <input id="bq" placeholder="Search name, city, state (TX) or high school…" value="${esc(b.q)}">
@@ -288,7 +289,7 @@ function recruitHTML(r){
   h+=`<div class="rstatus">${st}</div>`;
   if(!P){const hs=hsById(r.hs);const ph=pipeHS(r),ps=pipeSt(r);const ai=admitIssue(r,U().teamId);
     h+=`<div class="rinfo">${hs?`🏫 <b>${esc(hs.name)}</b> · Coach ${esc(hs.coach)}<br>🔗 School pipeline: <b>${pipeLabel(ph)}</b>${ph?" ("+Math.round(ph)+")":""} · ${esc(STATE_NAMES[r.st]||r.st)}: <b>${pipeLabel(ps)}</b>${ps?" ("+Math.round(ps)+")":""}${ph>=20||ps>=40?` · <span class="up">+${Math.round((pipeMult(r)-1)*100)}% recruiting pull</span>`:""}<br>`:""}
-     ${r.han?(r.hanK?`🕴️ Handler: <b>${esc(r.han.n)}</b> (his ${esc(r.han.k)}) — expect NIL demands<br>`:""):""}${r.par&&r.parK?`👪 ${esc(PARENT_KINDS[r.par])}<br>`:""}
+     ${r.org&&!r.off.includes(uid)?`👀 <b>Interested in ${esc(t.school)}</b> — ${esc(ORG_WHY[r.org])}. An offer would land well.<br>`:r.org?`👀 ${esc(ORG_WHY[r.org])}.<br>`:""}${r.han?(r.hanK?`🕴️ Handler: <b>${esc(r.han.n)}</b> (his ${esc(r.han.k)}) — expect NIL demands<br>`:""):""}${r.par&&r.parK?`👪 ${esc(PARENT_KINDS[r.par])}<br>`:""}
      🎓 ${gpaVis(r)?`GPA <b>${r.gpa.toFixed(2)}</b> · ${ai?`<span class="down">⚠️ ${esc(ai)} — needs a waiver (${waiversLeft()} left)</span>`:`<span class="up">Meets your ${U().ad.tier} standard</span>`}`:`Transcript unknown — scout him or call to find out`}</div>`;}
   // scouting
   h+=`<div class="card in"><div class="ch">🔎 Scouting report <span class="muted small">${r.sc}% complete</span></div><div class="scbar"><i style="width:${r.sc}%"></i></div>
