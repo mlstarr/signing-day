@@ -688,7 +688,7 @@ function openGameMenu(){
    <button class="btn wide" id="gm-saves">💾 Saves & backups</button>
    <button class="btn wide" id="gm-help">📖 How to play</button>
    <button class="btn wide" id="gm-tips">💬 Icon hints: ${tipsOn?"On":"Off"}</button>`);
-  $("#gm-tips").onclick=e=>{setTips(!tipsOn);e.target.textContent="💬 Icon hints: "+(tipsOn?"On":"Off");toast(tipsOn?"Tap any icon to see what it means.":"Icon hints off.");};
+  $("#gm-tips").onclick=e=>{setTips(!tipsOn);e.target.textContent="💬 Icon hints: "+(tipsOn?"On":"Off");toast(tipsOn?"Tap an icon to see what it means — press and hold on icons inside rows.":"Icon hints off.");};
   const exit=async(mode,btn)=>{btn.textContent="Saving…";await save().catch(()=>{});closeSheet();S=null;ngSel=null;ngSlot=null;{const mm=getMeta();mm.exit=1;setMeta(mm);}window._ngq="";applyTheme(null);ngMode=mode;render();window.scrollTo(0,0);};
   $("#gm-resume").onclick=closeSheet;
   $("#gm-menu").onclick=e=>exit(null,e.target);
@@ -715,7 +715,7 @@ function renderNewGame(){
   $("#ngstart").onclick=()=>{const name=$("#ngname").value.trim()||"Director";const diff=$("#ngdiff").value;$("#ngstart").textContent="Building the 2026 world…";$("#ngstart").disabled=true;
     setTimeout(()=>{const m=getMeta();let slot=ngSlot||[1,2,3].find(n=>!m.slots[n])||m.active||1;ngSlot=null;ngMode=null;newGame(ngSel,name,diff,slot);save();ui.tab="home";render();window.scrollTo(0,0);
       openSheet(`<h2>Welcome to ${esc(UT().school)}, ${esc(name)}.</h2><p>It's August ${S.year}. Head coach <b>${esc(UT().coach.name)}</b> hands you the board: the Class of ${S.classYear} already has <b>${S.recruits.filter(r=>r.com===U().teamId&&r.cls===S.classYear).length} commits</b>, and ${targetCount()} uncommitted targets are on your priority list.</p>
-       <ul class="sum"><li>⭐ Star recruits to put them on your priority board.</li><li>🔎 Scout before you trust the stars.</li><li>🏟️ Book official visits for home games now.</li><li>▶ Advance when your hours are spent.</li><li>💬 Tap any icon to see what it means — turn hints off in the ☰ menu.</li></ul><p class="small muted">Full guide: Office → How to play.</p><button class="btn pri wide" id="wok">Let's go</button>`,"sum");
+       <ul class="sum"><li>⭐ Star recruits to put them on your priority board.</li><li>🔎 Scout before you trust the stars.</li><li>🏟️ Book official visits for home games now.</li><li>▶ Advance when your hours are spent.</li><li>💬 Tap any icon to see what it means (press and hold on icons inside a row) — turn hints off in the ☰ menu.</li></ul><p class="small muted">Full guide: Office → How to play.</p><button class="btn pri wide" id="wok">Let's go</button>`,"sum");
       $("#wok").onclick=closeSheet;},40);};
 }
 
@@ -776,6 +776,14 @@ function showTip(el){let b=document.getElementById("tipb");if(!b){b=document.cre
   b.style.left=x+"px";b.style.top=y+"px";clearTimeout(b._t);b._t=setTimeout(hideTip,3500);}
 (function(){let q=false;const mo=new MutationObserver(()=>{if(!tipsOn||q)return;q=true;requestAnimationFrame(()=>{q=false;mo.disconnect();tipifyAll();mo.observe(document.body,{childList:true,subtree:true});});});
   window.addEventListener("load",()=>{document.body.classList.toggle("tips",tipsOn);mo.observe(document.body,{childList:true,subtree:true});tipifyAll();});
-  document.addEventListener("click",e=>{const t=e.target.closest&&e.target.closest("[data-tip]");if(tipsOn&&t){e.preventDefault();e.stopPropagation();showTip(t);return;}hideTip();},true);
+  // icons inside tappable rows: a tap goes to the row, a press-and-hold shows the hint
+  const inAction=el=>{for(let p=el.parentElement;p&&p!==document.body;p=p.parentElement){if(p.id==="lvlchip"||p.tagName==="BUTTON"||p.tagName==="A")return true;for(const k in p.dataset){if(k!=="tip"&&k!=="arm")return true;}}return false;};
+  let lp=null,lpFired=false;
+  document.addEventListener("pointerdown",e=>{lpFired=false;const t=tipsOn&&e.target.closest&&e.target.closest("[data-tip]");if(!t)return;clearTimeout(lp);lp=setTimeout(()=>{lpFired=true;showTip(t);},450);},true);
+  ["pointerup","pointercancel","pointermove"].forEach(ev=>document.addEventListener(ev,e=>{if(ev==="pointermove"&&Math.abs(e.movementX)+Math.abs(e.movementY)<4)return;clearTimeout(lp);},true));
+  document.addEventListener("contextmenu",e=>{if(e.target.closest&&e.target.closest("[data-tip]"))e.preventDefault();},true);
+  document.addEventListener("click",e=>{const t=e.target.closest&&e.target.closest("[data-tip]");
+    if(lpFired){lpFired=false;e.preventDefault();e.stopPropagation();return;}
+    if(tipsOn&&t&&!inAction(t)){e.preventDefault();e.stopPropagation();showTip(t);return;}hideTip();},true);
   document.addEventListener("mouseover",e=>{if(!tipsOn||!matchMedia("(hover:hover)").matches)return;const t=e.target.closest&&e.target.closest("[data-tip]");if(t)showTip(t);});
   window.addEventListener("scroll",hideTip,{passive:true});})();
