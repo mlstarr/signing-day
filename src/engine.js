@@ -1044,7 +1044,7 @@ function advance(){
     addNews(`✍️ Early Signing Period: ${n} prospects signed nationally. ${UT().school} inked ${mineS}.`,"user");
     sum.lines.push(`✍️ You signed ${mineS} recruits in the Early Signing Period.`);
   }
-  if(p.type==="ccg"){playCCGs(sum);updatePolls();evts=recruitTick(0.5,{});}
+  if(p.type==="ccg"){playCCGs(sum);updatePolls();evts=recruitTick(0.5,{});contractTalks(sum);}
   if(p.type==="sel"){selectCFP(sum);seasonAwards(sum);playBowls(sum);coachingCarousel(sum);rerankUpdate("Final regular-season");}
   if(p.type==="cfp"){playCFPRound(p.round,sum);if(p.round===4)programPerception(sum);evts=p.round<=2?recruitTick(0.4,{}):[];}
   if(p.type==="portal"){
@@ -1282,7 +1282,7 @@ function springProgression(sum){
   invalidateProj();
 }
 function rollYear(sum){
-  S.year++;S.cal=buildCalendar(S.year);S.phaseIdx=0;U().yearsAt++;
+  S.year++;S.cal=buildCalendar(S.year);S.phaseIdx=0;U().yearsAt++;S.teamIds.forEach(id=>{const c=T(id).coach;ctrOf(id);c.ctr.y--;delete c.unhappy;});
   coachGrowth(sum);U().bonusNIL=Math.round(U().bonusNIL*0.5);
   (U().staff||[]).forEach(s=>{if(!s)return;s.yrs++;if(R()<0.5)s.rec=clamp(s.rec+rint(0,2),40,95);if(R()<0.5)s.dev=clamp(s.dev+rint(0,2),40,95);});
   S.teamIds.forEach(id=>{resetNeeds(T(id));T(id).target=rint(20,25);});
@@ -1317,8 +1317,11 @@ function coachingCarousel(sum){
   const uid=U().teamId;const openings=[];
   S.teamIds.forEach(id=>{const t=T(id);const exp=3.5+(t.prestige-38)/60*6.5;const perf=t.w-exp;
     t.coach.hot=clamp(t.coach.hot*0.6-perf*0.7,-5,8);t.coach.yrs++;
-    const fireP=t.coach.hot>3.2?0.35+(t.coach.hot-3.2)*0.15:0;
-    if(fireP&&R()<fireP)openings.push({id,why:"fired",old:t.coach.name});
+    const ct=ctrOf(id);let fireP=t.coach.hot>3.2?0.35+(t.coach.hot-3.2)*0.15:0;
+    if(fireP&&ct.buy>=25)fireP*=ct.buy>=50?0.55:0.75;
+    if(fireP&&R()<fireP){openings.push({id,why:"fired",old:t.coach.name});if(id===uid&&U().ad){U().ad.commit=clamp(U().ad.commit-Math.round(ct.buy/8),0,100);}if(ct.buy>=15&&(t.prestige>=60||id===uid))addNews(`💸 ${t.school} will owe ${t.coach.name} a ${money(ct.buy*1000)} buyout.`,"coach",id);}
+    else if(ct.y<=0&&t.coach.hot>1.2&&id!==uid)openings.push({id,why:"contract not renewed",old:t.coach.name});
+    else if(ct.y<=0||(id!==uid&&perf>=2.5&&R()<0.6)){extendCtr(id,perf>=2.5?rnd(0.12,0.3):rnd(0,0.08),perf>=2.5?rint(2,4):rint(1,3));if(perf>=2.5&&t.prestige>=65&&id!==uid)addNews(`✍️ ${t.school} extends ${t.coach.name} after a big year (${money(t.coach.ctr.sal)}/yr).`,"coach",id);}
     else if(t.w>=10&&t.coach.game>=84&&R()<0.045*(1.7-coachLoy(t.coach)/100)*(t.w>=12?1.3:1))openings.push({id,why:"left for the NFL",old:t.coach.name});
   });
   openings.sort((a,b)=>T(b.id).prestige-T(a.id).prestige);
@@ -1345,12 +1348,12 @@ function coachingCarousel(sum){
         if(cid===uid||c.loy>=75||T(cid).prestige>=60){addNews(`🙅 ${c.name} turns down ${t.school} to stay at ${T(cid).school}.`,"coach",cid);c.spurn=(c.spurn||0)+1;if(cid===uid){c.loyKnown=1;sum.lines.push(`🙅 Coach ${c.name.split(" ").pop()} turned down ${t.school} — he's staying.`);}}}
       if(fromId){const from=T(fromId);nc={...from.coach,hot:0,yrs:0};taken.add(from.id);
         addNews(`✍️ ${t.school} hires ${nc.name} away from ${from.school}${from.coach.dream===o.id?" — his dream job":""}.`,"coach",o.id);if(nc.dream===o.id)nc.loy=95,delete nc.dream;
-        const old=from.coach.name;from.coach=fakeCoach(56,68);
+        const old=from.coach.name;from.coach=fakeCoach(56,68);from.coach.ctr=newCtr(from.id,from.coach,0.8);
         addNews(`✍️ ${from.school} promotes ${from.coach.name} to replace ${old}.`,"coach",from.id);
         if(from.id===uid){coachChangeUser(sum,old,from.coach);newHCStaff(sum);if(!S.pendingJob||S.pendingJob.role)S.pendingJob={type:"follow",to:o.id,coach:nc.name,newCoach:from.coach.name};}
         S.recruits.forEach(r=>{if(r.com===from.id&&!r.signed&&R()<0.3)decommit(r,"his head coach left");});
       }else{nc=fakeCoach(64,80);addNews(`✍️ ${t.school} hires coordinator ${nc.name} as head coach.`,"coach",o.id);}}
-    const oldName=t.coach.name;t.coach=nc;
+    const oldName=t.coach.name;t.coach=nc;nc.ctr=newCtr(o.id,nc,nc.real&&nc.yrs===0?1.25:1);
     if(o.id===uid){coachChangeUser(sum,oldName,nc);newHCStaff(sum);
       if(o.why==="fired"){const keepP=clamp(0.3+U().rep/200+(U().sec-50)/120,0.1,0.9);S.pendingJob={type:"fired",old:oldName,coach:nc.name,kept:R()<keepP};}
       else S.pendingJob={type:"nfl",old:oldName,coach:nc.name};}
@@ -1464,6 +1467,7 @@ function resolveEvent(choice){
       if(R()<0.7){a.sal=Math.round(a.sal*1.35/25)*25;a.amb=Math.max(0,a.amb-0.3);addTrust("hc",1);msg=`The AD took your advice and countered. ${a.name} stays at ${money(a.sal)}/yr.`;}else{U().staff[e.si]=null;msg=`The AD countered on your word, but ${a.name} took the job anyway. Coach ${hcLast()} will interview replacements.`;}}break;
     case "poachLet":{const i=e.si;const a=U().staff[i];if(a&&a.id===e.aid){const v=(a.rec+a.dev+a.sch)/3;if(v>=76&&R()<0.35){a.sal=Math.round(a.sal*1.3/25)*25;a.amb=Math.max(0,a.amb-0.3);msg=`You stayed out of it. The head coach pushed the AD himself — ${a.name} stays at ${money(a.sal)}/yr.`;}else{U().staff[i]=null;msg=`You stayed out of it. ${a.name} is off to a new job; Coach ${hcLast()} will interview replacements.`;}}else msg="";}break;
     case "rsYes":case "rsNo":msg=resolveRS(e,choice==="rsYes");break;
+    case "ctrAll":case "ctrPay":case "ctrHold":msg=resolveCtr(e,choice);break;
     case "schYes":case "schNo":msg=resolveSch(e,choice==="schYes");break;
   }
   return msg;
@@ -1720,11 +1724,57 @@ function recruitWeekly(sum,scale){
 function loyFor(id){const x=COACH_LOY[id];if(x)return {loy:x[0],loyN:x[1],dream:x[2]||undefined,lp:clamp(Math.round(x[0]+gauss(0,6)),5,99)};const l=clamp(Math.round(gauss(55,15)),20,90);return {loy:l,lp:clamp(Math.round(l+gauss(0,12)),5,99)};}
 function coachLoy(c){if(c.loy===undefined){const l=clamp(Math.round(gauss(55,15)),20,90);c.loy=l;c.lp=clamp(Math.round(l+gauss(0,12)),5,99);}return c.loy;}
 function coachPubLoy(c){coachLoy(c);if(c.lp===undefined)c.lp=c.loy;return c.lp;}
-function acceptP(c,fromT,toT){const gap=toT.prestige-fromT.prestige;const loy=coachLoy(c);
-  return clamp(0.18+gap/45-(loy-50)/55+(c.yrs<=2?0.06:0),0.02,0.95);}
+function acceptP(c,fromT,toT){const gap=toT.prestige-fromT.prestige;const loy=coachLoy(c);const ct=ctrOf(fromT.id);
+  return clamp(0.18+gap/45-(loy-50)/55+(c.yrs<=2?0.06:0)+(c.unhappy?0.25:0)+(ct.y<=1?0.1:0)-Math.min(0.15,ct.buy/250),0.02,0.95);}
 function loyLabel(v){return v>=88?"Lifer — this is his place":v>=72?"Committed to the program":v>=50?"Would listen to the right offer":v>=32?"Open to a bigger job":"Always eyeing the next job";}
 function loyRead(){const c=UT().coach;coachLoy(c);const yrs=Math.min(U().yearsAt||0,c.yrs||0);const tr=trust().hc;
   if(c.loyKnown||yrs>=2||tr>=70)return {lvl:2,txt:loyLabel(c.loy)};
   if(yrs>=1||tr>=55){const b=c.loy>=70?"Seems settled here":c.loy<=40?"Seems to have one eye on bigger jobs":"Hard to read — could go either way";return {lvl:1,txt:b};}
   return {lvl:0,txt:"Unknown — you'll learn where his heart is as you work with him"};}
 function migrateLoy(){S.teamIds.forEach(id=>{const c=T(id).coach;if(c.loy===undefined){if(c.real&&COACH_LOY[id]&&T(id).coach.name)Object.assign(c,loyFor(id));else coachLoy(c);}});}
+
+// ---------- COACH CONTRACTS ----------
+function newCtr(id,c,mult){const t=T(id);const sal=clamp(700+(t.prestige-30)/70*8500+((c.game||70)-70)*90+((c.rec||70)-70)*40,600,14000)*(mult||1)*rnd(0.9,1.1);
+  const y=clamp(Math.round(3+coachLoy(c)/30+rnd(-1,1.5)),2,7);const s2=Math.round(sal/25)*25;return {sal:s2,y,buy:Math.round(s2*y*0.65/100)/10};}
+function ctrOf(id){const c=T(id).coach;if(!c.ctr)c.ctr=newCtr(id,c);return c.ctr;}
+function extendCtr(id,raise,add){const ct=ctrOf(id);ct.sal=Math.round(ct.sal*(1+raise)/25)*25;ct.y=Math.max(ct.y,0)+add;ct.buy=Math.round(ct.sal*ct.y*0.65/100)/10;}
+const CTR_ASKS={
+ coord:["a bigger pay pool for his coordinators (+$KK)","Coordinators get raises; they're harder to poach and better candidates take calls"],
+ dept:["more recruiting staff — one extra upgrade for your department","+1 department upgrade point for you"],
+ nil:["a bigger NIL commitment from the collective (+$KK/yr)","More player-comp budget"],
+ fac:["a facilities project","+facilities"],
+ ov:["a bigger official-visit budget","+2 official-visit slots"],
+ hrs:["two more recruiting staffers","+3 recruiting hours a week"]};
+function contractTalks(sum){const uid=U().teamId;const t=UT();const c=t.coach;const ct=ctrOf(uid);
+  if(c.ctrYr===S.year)return;const exp=3.5+(t.prestige-38)/60*6.5;const perf=t.w-exp;
+  const big=perf>=2.5||t.w>=11||(t.apRank&&t.apRank<=8);const expiring=ct.y<=1&&perf>=0;
+  if(!big&&!expiring)return;c.ctrYr=S.year;
+  const raise=big?rnd(0.15,0.35):rnd(0.04,0.12);const add=big?rint(2,4):rint(2,3);const newSal=Math.round(ct.sal*(1+raise)/25)*25;
+  const coordAmt=Math.round(rint(4,9)*100);const nilAmt=Math.round(rint(4,8)*100);
+  const asks=["coord",pick(["dept","dept","nil","fac","ov","hrs"])];
+  const ask=k=>CTR_ASKS[k][0].replace("KK",money(k==="coord"?coordAmt:nilAmt).slice(1));
+  const hot=perf>=3.5||t.w>=12;
+  S.events.push({id:"ctr",raise,add,newSal,asks,coordAmt,nilAmt,title:`📝 Coach ${hcLast()} wants a new deal`,
+    text:`${big?`After a ${t.w}-${t.l} season`:"With his contract running out"}, ${c.name}'s agent is at the AD's door: a raise from ${money(ct.sal)} to ${money(newSal)}/yr and ${add} more years. He also wants ${ask(asks[0])} and ${ask(asks[1])}.${hot?" Other programs are calling.":""} The AD decides — but he wants your read first.`,
+    opts:[["Back him on everything","ctrAll"],["Pay him, skip the extras","ctrPay"],["Tell the AD to hold the line","ctrHold"]]});}
+function grantAsk(k,e){const u=U();const t=UT();
+  if(k==="coord"){u.ad.staffPool=(u.ad.staffPool||0)+e.coordAmt;(u.staff||[]).forEach(a=>{if(a){a.sal=Math.round(a.sal*1.1/25)*25;a.amb=Math.max(0,a.amb*0.6);}});return `coordinator pool +${money(e.coordAmt)}`;}
+  if(k==="dept"){u.upPts=(u.upPts||0)+1;return "+1 department upgrade for you";}
+  if(k==="nil"){u.ad.nil=(u.ad.nil||0)+e.nilAmt;return `NIL budget +${money(e.nilAmt)}`;}
+  if(k==="fac"){const g=rint(3,6);t.fac=clamp(t.fac+g,40,100);return `facilities +${g}`;}
+  if(k==="ov"){u.ad.ov=(u.ad.ov||0)+2;return "+2 official-visit slots";}
+  if(k==="hrs"){u.ad.staff=(u.ad.staff||0)+3;return "+3 recruiting hours/week";}}
+function resolveCtr(e,choice){const uid=U().teamId;const c=UT().coach;const ct=ctrOf(uid);const nm=hcLast();
+  const pay=()=>{ct.sal=e.newSal;ct.y=Math.max(ct.y,0)+e.add;ct.buy=Math.round(ct.sal*ct.y*0.65/100)/10;};
+  if(choice==="ctrAll"){
+    if(R()<clamp(0.45+trust().ad/180+(UT().nil||0)/40,0.2,0.95)){pay();const g=e.asks.map(k=>grantAsk(k,e));c.loy=clamp(coachLoy(c)+8,0,99);addTrust("hc",3);
+      addNews(`✍️ ${UT().school} extends ${c.name} through ${S.year+ct.y} (${money(ct.sal)}/yr).`,"user");
+      return `The AD went all in on your word. Coach ${nm} signs through ${S.year+ct.y} at ${money(ct.sal)}/yr — plus ${g.join(" and ")}. He knows you went to bat for him.`;}
+    choice="ctrPay";var noted=`The AD wouldn't fund the extras. `;}
+  if(choice==="ctrPay"){pay();const g=R()<0.5?grantAsk("coord",{...e,coordAmt:Math.round(e.coordAmt/2/25)*25}):null;c.loy=clamp(coachLoy(c)+3,0,99);addTrust("hc",-0.5);
+    addNews(`✍️ ${UT().school} extends ${c.name} through ${S.year+ct.y}.`,"user");
+    return `${typeof noted==="string"?noted:""}Coach ${nm} gets his raise (${money(ct.sal)}/yr through ${S.year+ct.y})${g?` and a smaller bump for his staff (${g})`:", but no extras"}. He's satisfied, not thrilled.`;}
+  // hold the line
+  addTrust("ad",2);addTrust("hc",-3);c.loy=clamp(coachLoy(c)-10,0,99);
+  if(coachLoy(c)<70){c.unhappy=1;return `The AD held firm. Coach ${nm} is unhappy — his agent is taking calls. If a bigger job opens, he may listen.`;}
+  return `The AD held firm. Coach ${nm} grumbled, but he's not going anywhere.`;}

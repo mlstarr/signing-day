@@ -19,7 +19,7 @@ function trChips(p,showHidden){const tr=p.tr||[];const rv=tr.filter(x=>x.rev);co
 function gpaVis(r){return !r.portal&&(r.sc>=20||r.gpaK||hasPerk("e2")||pipeHS(r)>=20);}
 function isPipe(r){return !r.portal&&(pipeHS(r)>=20||pipeSt(r)>=40);}
 function fitTag(b){return b===null||b===undefined?"":`<span class="fit f${b>=2?"g":b<=-2?"b":"n"}">${b>0?"+":""}${b}</span>`;}
-function trIcons(p){return (p.tr||[]).filter(x=>x.rev).map(x=>TRAITS[x.k].i).join("");}
+function trIcons(p){return (p.tr||[]).filter(x=>x.rev).map(x=>`<span class="tip" data-tip="${esc(TRAITS[x.k].n)} — ${esc(TRAITS[x.k].d)}">${TRAITS[x.k].i}</span>`).join("");}
 function momLabel(m){m=m||0;return m>=6?"🔥 Red hot":m>=3?"📈 Rising":m<=-6?"🧊 Ice cold":m<=-3?"📉 Sliding":"➖ Steady";}
 function trend(cur,prev,fmt){if(prev===undefined)return "";const d=Math.round((cur-prev)*10)/10;return d?` <span class="${d>0?"up":"down"}">${d>0?"▲":"▼"}${fmt?fmt(Math.abs(d)):Math.abs(d)}</span>`:"";}
 
@@ -303,7 +303,7 @@ function recruitHTML(r){
      return s+`</div>`;})()}
    ${P?"":`<div class="small muted">🏈 Senior year: ${esc(statLine(r))}</div>`}</div>`;
   // traits
-  if((r.tr||[]).length)h+=`<div class="card in"><div class="ch">🧬 Traits <span class="muted small">revealed by film, evals, visits & conversations</span></div><div class="tchs">${trChips(r,true)}</div>${(r.tr||[]).filter(x=>x.rev).map(x=>`<div class="small muted">${TRAITS[x.k].i} ${esc(TRAITS[x.k].d)}</div>`).join("")}</div>`;
+  if((r.tr||[]).length)h+=`<div class="card in"><div class="ch">🧬 Traits <span class="muted small">revealed by film, evals, visits & conversations</span></div><div class="tchs">${trChips(r,true)}</div>${(r.tr||[]).filter(x=>x.rev).map(x=>`<div class="small muted notip">${TRAITS[x.k].i} ${esc(TRAITS[x.k].d)}</div>`).join("")}</div>`;
   // motivations + your grades
   h+=`<div class="card in"><div class="ch">💭 What matters to him <span class="muted small">· your program's grade</span></div><div class="mots">${MOTIVES.map((m,i)=>{const k=r.known&(1<<i);const w=r.mot[i];const g=grade(t,r,m[0]);
     const extra=k?(m[0]==="legacy"&&r.leg?` <span class="small muted">(${esc(T(r.leg).school)})</span>`:m[0]==="life"?` <span class="small muted">(${r.lifeP==="warm"?"wants warm weather":r.lifeP==="cold"?"doesn't mind the cold":"anywhere's fine"})</span>`:m[0]==="scheme"&&r.fitP?` <span class="small muted">(${esc(r.fitP)} · you run ${esc(["QB","RB","WR","TE","OL"].includes(r.pos)?t.off:t.def)})</span>`:""):"";
@@ -436,6 +436,7 @@ function vTeam(){
     const c=t.coach;const hot=c.hot>3?"🔥 Hot seat":c.hot>1.5?"🌡️ Warm":"🧊 Secure";
     h+=`<div class="card"><div class="ch">Head Coach</div><div class="coach"><b>${esc(c.name)}</b><span class="muted small">${c.real?"":"(new hire)"} · ${hot}</span>
       <div class="grid3"><div class="stat"><b>${c.rec}</b><span>Recruiting</span></div><div class="stat"><b>${c.dev}</b><span>Development</span></div><div class="stat"><b>${c.game}</b><span>Game day</span></div></div></div>
+      ${(()=>{const ct=ctrOf(t.id);return `<div class="goal"><span>📝 Contract: <b>${money(ct.sal)}/yr</b> through ${S.year+Math.max(0,ct.y)}</span><span class="small muted">buyout ${money(ct.buy*1000)}</span></div>${c.unhappy?`<div class="small down">😠 Unhappy with his contract — his agent is taking calls.</div>`:""}`;})()}
       ${(()=>{const lr=loyRead();return `<div class="goal"><span>🏠 Loyalty read: <b>${esc(lr.txt)}</b></span></div>${c.loyN&&lr.lvl>=1?`<div class="small muted">${esc(c.loyN)}.</div>`:""}`;})()}
       <div class="small muted">Recruiting powers HC visits and "Head Coach" pitches. Development grows your signees and sells "NFL Development". Game day wins games — and wins sell everything.</div></div>`;
     const st=U().staff||[];
@@ -644,7 +645,7 @@ function openPlayer(id){const p=S.roster.find(x=>x.id===id);if(!p)return;
    ${p.pos!=="K"?`<div class="card in"><div class="ch">🧩 Play style</div>${p.fk?`<div>${esc(archName(p))} · fit in your ${esc(OFF_POS.includes(p.pos)?UT().off:UT().def)}: <b>${fitLetter(fitBonus(p,U().teamId))}</b> ${fitTag(fitBonus(p,U().teamId))} → effective <b>${effOvr(p,U().teamId)}</b></div><div class="fittab">${styleList(p.pos).map(s=>`<span>${esc(s)} ${fitTag(Math.round(fitVal(p,s)*4))}</span>`).join("")}</div>`:`<div class="muted small">Your staff hasn't figured out his best fit yet — practice and game snaps will tell.</div>`}</div>`:""}
    <div class="card in"><div class="ch">📊 Stats</div><div class="small">This season: ${esc(pStatLine(p))}</div>${p.ls?`<div class="small muted">Last season: ${esc(pStatLine({pos:p.pos,s:p.ls}))}</div>`:""}${p.cs&&p.cs.g?`<div class="small muted">Career: ${esc(pStatLine({pos:p.pos,s:p.cs}))}</div>`:""}</div>
    <div class="card in"><div class="ch">📈 Development</div><div class="hbars">${bars}</div><div class="small" style="margin:4px 0">Since spring: <b class="${(p.sd||0)>0?"up":(p.sd||0)<0?"down":""}">${(p.sd||0)>0?"+":""}${p.sd||0} OVR</b> <span class="muted">· grows weekly with practice, coaching, snaps and game performance</span></div>${p.woGem&&p.fk?`<div class="flag gem">💎 Walk-on with real upside — the staff thinks he's a late bloomer.</div>`:""}${p.yr>=3&&dr?`<div class="small">NFL projection: <b>Round ${dr}</b></div>`:p.yr>=3?`<div class="small muted">Not yet on NFL radars (77+ OVR).</div>`:""}</div>
-   <div class="card in"><div class="ch">🧬 Traits</div><div class="tchs">${trChips(p,true)||"<span class='muted small'>None known.</span>"}</div>${(p.tr||[]).filter(x=>x.rev).map(x=>`<div class="small muted">${TRAITS[x.k].i} ${esc(TRAITS[x.k].d)}</div>`).join("")}<div class="small muted" style="margin-top:6px">Hidden traits surface through practice reps, game snaps and spring ball.</div></div>`,"rec");}
+   <div class="card in"><div class="ch">🧬 Traits</div><div class="tchs">${trChips(p,true)||"<span class='muted small'>None known.</span>"}</div>${(p.tr||[]).filter(x=>x.rev).map(x=>`<div class="small muted notip">${TRAITS[x.k].i} ${esc(TRAITS[x.k].d)}</div>`).join("")}<div class="small muted" style="margin-top:6px">Hidden traits surface through practice reps, game snaps and spring ball.</div></div>`,"rec");}
 
 // ---------- TEAM SHEET ----------
 function openTeam(id){
@@ -685,7 +686,9 @@ function openGameMenu(){
    <button class="btn wide" id="gm-menu">🏠 Save & exit to main menu</button>
    <button class="btn wide" id="gm-new">＋ Start a new career</button>
    <button class="btn wide" id="gm-saves">💾 Saves & backups</button>
-   <button class="btn wide" id="gm-help">📖 How to play</button>`);
+   <button class="btn wide" id="gm-help">📖 How to play</button>
+   <button class="btn wide" id="gm-tips">💬 Icon hints: ${tipsOn?"On":"Off"}</button>`);
+  $("#gm-tips").onclick=e=>{setTips(!tipsOn);e.target.textContent="💬 Icon hints: "+(tipsOn?"On":"Off");toast(tipsOn?"Tap any icon to see what it means.":"Icon hints off.");};
   const exit=async(mode,btn)=>{btn.textContent="Saving…";await save().catch(()=>{});closeSheet();S=null;ngSel=null;ngSlot=null;{const mm=getMeta();mm.exit=1;setMeta(mm);}window._ngq="";applyTheme(null);ngMode=mode;render();window.scrollTo(0,0);};
   $("#gm-resume").onclick=closeSheet;
   $("#gm-menu").onclick=e=>exit(null,e.target);
@@ -712,7 +715,7 @@ function renderNewGame(){
   $("#ngstart").onclick=()=>{const name=$("#ngname").value.trim()||"Director";const diff=$("#ngdiff").value;$("#ngstart").textContent="Building the 2026 world…";$("#ngstart").disabled=true;
     setTimeout(()=>{const m=getMeta();let slot=ngSlot||[1,2,3].find(n=>!m.slots[n])||m.active||1;ngSlot=null;ngMode=null;newGame(ngSel,name,diff,slot);save();ui.tab="home";render();window.scrollTo(0,0);
       openSheet(`<h2>Welcome to ${esc(UT().school)}, ${esc(name)}.</h2><p>It's August ${S.year}. Head coach <b>${esc(UT().coach.name)}</b> hands you the board: the Class of ${S.classYear} already has <b>${S.recruits.filter(r=>r.com===U().teamId&&r.cls===S.classYear).length} commits</b>, and ${targetCount()} uncommitted targets are on your priority list.</p>
-       <ul class="sum"><li>⭐ Star recruits to put them on your priority board.</li><li>🔎 Scout before you trust the stars.</li><li>🏟️ Book official visits for home games now.</li><li>▶ Advance when your hours are spent.</li></ul><p class="small muted">Full guide: Office → How to play.</p><button class="btn pri wide" id="wok">Let's go</button>`,"sum");
+       <ul class="sum"><li>⭐ Star recruits to put them on your priority board.</li><li>🔎 Scout before you trust the stars.</li><li>🏟️ Book official visits for home games now.</li><li>▶ Advance when your hours are spent.</li><li>💬 Tap any icon to see what it means — turn hints off in the ☰ menu.</li></ul><p class="small muted">Full guide: Office → How to play.</p><button class="btn pri wide" id="wok">Let's go</button>`,"sum");
       $("#wok").onclick=closeSheet;},40);};
 }
 
@@ -738,3 +741,41 @@ function hsDevHTML(r){if(r.portal)return "";let h="";
     if(r.sc>=55&&!(r.stale&&r.sc<75))h+=`<div class="flag ${d.k==="up"?"gem":"bust"}">${d.k==="up"?"📈":"📉"} ${yr} he ${esc(d.why)}. ${d.k==="up"?"Ceiling is up.":d.k==="flat"?"Development has stalled.":"Ceiling is down."}</div>`;
     else h+=`<div class="small muted" style="margin:4px 0">📰 Word on the circuit: he ${esc(d.why)}. Scout him to see what it means.</div>`;}
   return h;}
+
+// ---------- ICON HINTS ----------
+const ICON_TIPS={
+"★":"Star rating from the recruiting services (5★ = elite)","☆":"Not on your priority board — tap the star button to add",
+"⏱":"Recruiting hours left this week","🧢":"Head coach — visits left this week, or a head-coach decision","💰":"Player-comp (NIL) budget left","🏛️":"Political capital with the AD — spend it on requests",
+"⭐":"Your director level / a priority target","🏆":"Title, award or trophy","🏈":"Game, season or football stats","📈":"Rising — ranking, rating or development up","📉":"Falling — ranking, rating or development down",
+"✍️":"Signed / hired / extended","🌀":"Transfer portal","🏟️":"Official visit or home game","⚠️":"Warning — something needs attention","👀":"Interested in your school without an offer, or rumor",
+"🎓":"Graduation, academics or a coach promoted","🔥":"Hot — heated rivalry, hot seat or hot streak","⚔️":"Rivalry game","✅":"Done / win / goal met","🧩":"Scheme fit — how a player's style fits your system",
+"🔍":"Scouting","🔎":"Scouting","🔒":"Committed / locked in","💎":"Gem — your staff thinks he's better than his ranking","🔗":"Pipeline — your connection to a state or high school",
+"🔄":"Your evaluation is out of date — re-scout","🤝":"Trust or relationship","❌":"Loss / no","▲":"Up","▼":"Down","📋":"Rankings or depth chart","💼":"NIL deal / business",
+"🗺️":"Assistant's recruiting territory","🧑":"Staff / person","🎠":"Coaching carousel (coaching changes)","📞":"Call or job offer","🏕️":"Camp","🩹":"Injured (number = weeks out)",
+"📜":"Signing class / final results","🚨":"Alert — drama or a flip risk","🏠":"Home / local / loyalty","🎙️":"Media or press","📱":"Social media / phone call","🏫":"High school",
+"🚶":"Walk-on","🚶💎":"Walk-on your staff thinks is a hidden gem","😬":"Bad news about one of your players or commits","📝":"Contract or paperwork","🎖️":"Honor or award","🎟️":"Ticket / visit",
+"🚪":"Leaving the program","🧊":"Secure — not on the hot seat","🌡️":"Warm seat — pressure building","😠":"Unhappy","📊":"Stats","🔮":"Crystal Ball — public prediction of where he'll sign",
+"🧬":"Traits","🚩":"Red flag","⛔":"Suspended","💸":"Money / buyout","🙅":"Turned down an offer","🚀":"Breakout","🆕":"New","🧠":"Scheme / strategy","😤":"Frustrated about playing time",
+"🔴":"Bad / cold","🟡":"Lukewarm","🟢":"Good / warm","🎯":"Target or goal","⏳":"Decision timing","💥":"Big moment","🎉":"Celebration","📰":"News","🛠️":"Department upgrades","🏗️":"Facilities project",
+"🥩":"Booster","🗳️":"Vote / poll","🧳":"Visit / travel","💔":"Decommitment or heartbreak","📺":"TV / national spotlight","☰":"Menu: save, exit, new career, settings"};
+let tipsOn=(()=>{try{return localStorage.getItem("sd_tips")!=="0";}catch(e){return true;}})();
+function setTips(v){tipsOn=v;try{localStorage.setItem("sd_tips",v?"1":"0");}catch(e){}document.body.classList.toggle("tips",v);if(v)tipifyAll();hideTip();}
+const _tipKeys=Object.keys(ICON_TIPS).sort((a,b)=>b.length-a.length).map(k=>k.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"\\ufe0f?");
+const _tipRe=new RegExp("(★+|"+_tipKeys.join("|")+")","gu");
+function tipText(k){k=k.replace(/️/g,"");if(/^★+$/.test(k))return k.length>1?`${k.length}★ — star rating from the recruiting services`:ICON_TIPS["★"];return ICON_TIPS[k]||ICON_TIPS[k+"️"];}
+function tipify(root){if(!tipsOn||!root)return;const w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,{acceptNode:n=>{const p=n.parentElement;if(!p||p.closest("button,input,select,textarea,option,[data-tip],[data-tg],.star,a,.notip,.tchs,script,style"))return NodeFilter.FILTER_REJECT;_tipRe.lastIndex=0;return _tipRe.test(n.nodeValue)?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_REJECT;}});
+  const nodes=[];while(w.nextNode())nodes.push(w.currentNode);
+  nodes.forEach(n=>{const parts=n.nodeValue.split(_tipRe);if(parts.length<2)return;const f=document.createDocumentFragment();
+    parts.forEach((x,i)=>{if(!x)return;if(i%2===1&&tipText(x)){const sp=document.createElement("span");sp.className="tip";sp.dataset.tip=tipText(x);sp.textContent=x;f.appendChild(sp);}else f.appendChild(document.createTextNode(x));});
+    n.parentNode.replaceChild(f,n);});}
+function tipifyAll(){["#top","#view","#sheetBody"].forEach(s=>tipify($(s)));}
+function hideTip(){const b=document.getElementById("tipb");if(b)b.classList.remove("on");}
+function showTip(el){let b=document.getElementById("tipb");if(!b){b=document.createElement("div");b.id="tipb";document.body.appendChild(b);}
+  b.textContent=el.dataset.tip;b.classList.add("on");const r=el.getBoundingClientRect();const bw=Math.min(260,window.innerWidth-16);b.style.maxWidth=bw+"px";
+  const bh=b.offsetHeight;let x=r.left+r.width/2-b.offsetWidth/2;x=Math.max(8,Math.min(window.innerWidth-b.offsetWidth-8,x));let y=r.top-bh-8;if(y<8)y=r.bottom+8;
+  b.style.left=x+"px";b.style.top=y+"px";clearTimeout(b._t);b._t=setTimeout(hideTip,3500);}
+(function(){let q=false;const mo=new MutationObserver(()=>{if(!tipsOn||q)return;q=true;requestAnimationFrame(()=>{q=false;mo.disconnect();tipifyAll();mo.observe(document.body,{childList:true,subtree:true});});});
+  window.addEventListener("load",()=>{document.body.classList.toggle("tips",tipsOn);mo.observe(document.body,{childList:true,subtree:true});tipifyAll();});
+  document.addEventListener("click",e=>{const t=e.target.closest&&e.target.closest("[data-tip]");if(tipsOn&&t){e.preventDefault();e.stopPropagation();showTip(t);return;}hideTip();},true);
+  document.addEventListener("mouseover",e=>{if(!tipsOn||!matchMedia("(hover:hover)").matches)return;const t=e.target.closest&&e.target.closest("[data-tip]");if(t)showTip(t);});
+  window.addEventListener("scroll",hideTip,{passive:true});})();
