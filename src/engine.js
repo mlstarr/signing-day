@@ -468,11 +468,15 @@ function toggleTarget(r){if(S.user.targets[r.id]){delete S.user.targets[r.id];re
 function offerLimit(){return 110+U().up.staff*10;}
 function motLevel(w){return w>=0.24?"a top priority":w>=0.13?"important":w>=0.08?"somewhat important":"not a big deal";}
 function ovCap(key){const x=(U().ad?U().ad.ov:0)+(hasPerk("x2")?4:0);return (key.startsWith("ov")?12+U().up.staff*2:6+U().up.staff)+x;}
-function boosterEvent(){
-  if(U().boosterUsed)return {ok:false,msg:"Already held a booster event this week."};
-  if(!canSpend(6))return {ok:false,msg:"Need 6 hours."};
-  spend(6);U().boosterUsed=true;const t=UT();
-  const raised=Math.round((80+t.prestige*3+Math.max(0,t.streak)*40+Math.max(0,t.mom)*25+(t.apRank?(26-t.apRank)*12:0))*rnd(0.6,1.4)*(1+0.2*(U().up.collective-1))*skM("net",0.08)*(hasPerk("n4")?1.5:1)/5)*5;gainXP("net",4);
+const BOOSTER_MAX=3,BOOSTER_GAP=4,BOOSTER_H=10;
+function boosterState(){const u=U();if(!u.bd||u.bd.y!==S.year)u.bd={y:S.year,n:0,last:-99};const ph=S.phaseIdx;
+  const wait=Math.max(0,u.bd.last+BOOSTER_GAP-ph);return {n:u.bd.n,left:BOOSTER_MAX-u.bd.n,wait};}
+function boosterEvent(){const st=boosterState();
+  if(st.left<=0)return {ok:false,msg:"Your donors are tapped out for this year. Wins will bring them back next year."};
+  if(st.wait>0)return {ok:false,msg:`Too soon — give the donors ${st.wait} more week${st.wait>1?"s":""} before asking again.`};
+  if(!canSpend(BOOSTER_H))return {ok:false,msg:`Need ${BOOSTER_H} hours.`};
+  spend(BOOSTER_H);U().boosterUsed=true;U().bd.n++;U().bd.last=S.phaseIdx;const t=UT();const fat=[1,0.6,0.35][st.n]||0.3;
+  const raised=Math.round((40+t.prestige*1.8+Math.max(0,t.streak)*25+Math.max(0,t.mom)*15+(t.apRank?(26-t.apRank)*8:0))*fat*rnd(0.7,1.3)*(1+0.2*(U().up.collective-1))*skM("net",0.08)*(hasPerk("n4")?1.5:1)/5)*5;gainXP("net",4);
   U().bonusNIL+=raised;addNews(`💰 Booster dinner raises ${money(raised)} for the ${t.school} collective.`,"user");
   return {ok:true,msg:`Booster event raised ${money(raised)} for the collective!`};
 }
@@ -1113,8 +1117,9 @@ function openPortal(sum){
   S.portalOpen=true;const uid=U().teamId;S.portal=[];S.draftPool=[];
   S.teamIds.forEach(id=>{if(id===uid)rosterDepartures(sum);else aiDepartures(id);});
   S.portal.sort((a,b)=>b.tOvr-a.tOvr);S.portal.forEach((p,i)=>{p.rank=i+1;});
-  S.portal.forEach(p=>{const L=p.tOvr+10;const cands=S.teamIds.filter(id=>id!==uid&&id!==p.from&&Math.abs(T(id).talent-L+8)<14);
-    shuffle(cands).slice(0,rint(3,7)).forEach(id=>{p.off.push(id);p.int[id]=rnd(5,20)*attract(T(id),p);});});
+  S.portal.forEach(p=>{const L=p.tOvr+2;const cands=S.teamIds.filter(id=>id!==uid&&id!==p.from&&T(id).talent>=L-16&&T(id).talent<=L+12);
+    const n=p.rank<=60?rint(7,12):p.rank<=200?rint(4,8):rint(2,5);
+    wshuffle(cands,id=>Math.pow(Math.max(1,T(id).talent-L+18),1.0)*(0.6+T(id).nil/10)).slice(0,n).forEach(id=>{p.off.push(id);p.int[id]=rnd(8,22)*attract(T(id),p)*(0.7+T(id).nil/10);});});
   addNews(`🌀 The transfer portal is OPEN. ${S.portal.length} players entered — real players from real rosters.`,"portal");
   sum.lines.push(`🌀 Transfer portal open: ${S.portal.length} players. Use the Portal tab — they commit fast.`);
 }
@@ -1126,10 +1131,17 @@ function portalSign(q,dest){
 function portalTick(final,sum){
   const uid=U().teamId;const dm=DIFF_MULT[U().diff]||1;
   S.portal.forEach(p=>{if(p.com)return;
-    p.off.forEach(id=>{if(id===uid)return;const t=T(id);p.int[id]=(p.int[id]||0)+12*attract(t,p)*rnd(0.5,1.5)*dm*(t.nil/6);});
-    const ranked=p.off.map(id=>[id,p.int[id]||0]).sort((a,b)=>b[1]-a[1]);if(!ranked.length)return;
-    const [top,tp]=ranked[0];const sp=ranked[1]?ranked[1][1]:0;
-    if((final&&tp>8)||(tp>=45&&tp>=sp*1.1&&R()<0.45)){p.com=top;p.signed=true;portalSign(p,top);
+    p.off.forEach(id=>{if(id===uid)return;const t=T(id);p.int[id]=(p.int[id]||0)+15*attract(t,p)*rnd(0.6,1.4)*dm*Math.pow(t.nil/5.5,1.1);});
+    let ranked=p.off.map(id=>[id,p.int[id]||0]).sort((a,b)=>b[1]-a[1]);if(!ranked.length)return;
+    // bidding war: rich programs counter when someone else leads for a good player
+    if(p.rank<=150&&ranked[0][0]===uid&&p.off.includes(uid)){ranked.slice(1,3).forEach(([id])=>{const t=T(id);if(t.nil>=5&&R()<0.35+t.nil/30){const b=rnd(8,20)*t.nil/6*dm;p.int[id]+=b;if(!p.bidN){p.bidN=1;sum.lines.push(`💸 ${t.school} jumped into a NIL bidding war for portal ${p.pos} ${rName(p)}.`);}}});
+      ranked=p.off.map(id=>[id,p.int[id]||0]).sort((a,b)=>b[1]-a[1]);}
+    const [top0,tp]=ranked[0];const sp=ranked[1]?ranked[1][1]:0;
+    if((final&&tp>8)||(tp>=55&&tp>=sp*1.15&&R()<0.4)){
+      // he weighs his top options rather than taking the leader automatically
+      const pool=ranked.slice(0,3).filter(x=>x[1]>=tp*0.55);const top=wpick(pool,x=>Math.pow(x[1],3.2))[0];
+      p.com=top;p.signed=true;portalSign(p,top);
+      if(top!==uid&&p.off.includes(uid)&&ranked[0][0]===uid)sum.lines.push(`💔 Portal ${p.pos} ${rName(p)} chose ${T(top).school} over you at the last minute.`);
       if(top===uid){gainDXP(8);addNews(`🌀 PORTAL COMMIT: ${p.tOvr} OVR ${p.pos} ${rName(p)} (from ${T(p.from).school}) picks ${UT().school}!`,"user");sum.lines.push(`🌀 Portal pickup: ${p.pos} ${rName(p)} (${p.tOvr} OVR) from ${T(p.from).school}.`);}
       else if(p.rank<=40)addNews(`🌀 Top portal ${p.pos} ${rName(p)} (${p.tOvr} OVR, ex-${T(p.from).school}) commits to ${T(top).school}.`,"portal",top);
     }});
@@ -1283,7 +1295,7 @@ function springProgression(sum){
 }
 function rollYear(sum){
   S.year++;S.cal=buildCalendar(S.year);S.phaseIdx=0;U().yearsAt++;S.teamIds.forEach(id=>{const c=T(id).coach;ctrOf(id);c.ctr.y--;delete c.unhappy;});
-  coachGrowth(sum);U().bonusNIL=Math.round(U().bonusNIL*0.5);
+  coachGrowth(sum);U().bonusNIL=Math.round(U().bonusNIL*0.3);
   (U().staff||[]).forEach(s=>{if(!s)return;s.yrs++;if(R()<0.5)s.rec=clamp(s.rec+rint(0,2),40,95);if(R()<0.5)s.dev=clamp(s.dev+rint(0,2),40,95);});
   S.teamIds.forEach(id=>{resetNeeds(T(id));T(id).target=rint(20,25);});
   newSeason(false);
@@ -1778,3 +1790,5 @@ function resolveCtr(e,choice){const uid=U().teamId;const c=UT().coach;const ct=c
   addTrust("ad",2);addTrust("hc",-3);c.loy=clamp(coachLoy(c)-10,0,99);
   if(coachLoy(c)<70){c.unhappy=1;return `The AD held firm. Coach ${nm} is unhappy — his agent is taking calls. If a bigger job opens, he may listen.`;}
   return `The AD held firm. Coach ${nm} grumbled, but he's not going anywhere.`;}
+
+function wshuffle(a,wf){const x=a.map(v=>({v,k:Math.pow(R(),1/Math.max(1e-6,wf(v)))}));return x.sort((p,q)=>q.k-p.k).map(o=>o.v);}
